@@ -9,10 +9,12 @@ servers it loads (databases, Azure DevOps, GitHub and more), see the tokens you 
 keep its setup healthy.
 
 If you have more than one Claude subscription (personal and work, or two plans), hatrack keeps each
-login and swaps the one Claude uses with one click in the Windows tray, or one command on Linux/WSL.
+login and swaps the one Claude uses with one click in the Windows tray, or one command on macOS,
+Linux and WSL.
 It works for the `claude` CLI and the Claude Code extension for VS Code, since both read the same login.
 
 - **Windows:** a tray app (click the hat, pick an account, switch MCP servers on and off) plus the `hat` CLI.
+- **macOS:** a menu bar app with a dashboard window, plus the `hat` CLI.
 - **Linux and WSL:** the `hat` CLI.
 - **MCP servers:** add them from a catalog (PostgreSQL, MySQL, SQL Server, MongoDB, Redis, Azure DevOps,
   GitHub, Jira…), switch them off without losing their settings, group them into sets that follow
@@ -36,12 +38,14 @@ now using work@company.com. If an open Claude session still shows the old accoun
 - [Getting started](#getting-started)
 - [Commands](#commands)
 - [Windows tray app](#windows-tray-app)
+- [macOS menu bar app](#macos-menu-bar-app)
 - [Adding an account](#adding-an-account)
 - [MCP servers](#mcp-servers)
 - [Usage](#usage)
 - [Doctor and clean](#doctor-and-clean)
 - [VS Code](#vs-code)
 - [WSL and Windows](#wsl-and-windows)
+- [macOS](#macos)
 - [How it works](#how-it-works)
 - [Security and privacy](#security-and-privacy)
 - [Limits](#limits)
@@ -70,13 +74,31 @@ Prefer to look first? Download `hat-windows-amd64.exe` and `hatrack-tray-windows
 `hatrack-tray.exe`, and keep them in the same folder. Read [install.ps1](install.ps1) to see exactly what
 the script does.
 
-### Linux and WSL
+### macOS, Linux and WSL
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/baodq97/hatrack/main/install.sh | sh
 ```
 
-This puts `hat` in `~/.local/bin` (override with `HAT_INSTALL_DIR`). Builds exist for amd64 and arm64.
+This puts `hat` in `~/.local/bin` (override with `HAT_INSTALL_DIR`). Builds exist for amd64 and arm64
+(Apple silicon and Intel Macs).
+
+### macOS menu bar app
+
+Download `Hatrack-macos.zip` from the [latest release](https://github.com/baodq97/hatrack/releases/latest),
+unzip it and move `Hatrack.app` to Applications. It runs on Apple silicon and Intel Macs (macOS 11
+or later). The app is not notarized by Apple, so macOS blocks the first launch. Either run
+
+```sh
+xattr -d com.apple.quarantine /Applications/Hatrack.app
+```
+
+or open it once, then go to System Settings → Privacy & Security and click **Open Anyway**. (On
+macOS 14 and earlier, right-click the app and choose **Open** also works.)
+
+Or build it yourself (needs Go and the Xcode command line tools): `./build-mac-app.sh`.
+
+The `hat` CLI from the command above works alongside the app; both use the same saved accounts.
 
 ### Verify a download
 
@@ -87,10 +109,13 @@ attestation that proves it was built by this repository's release workflow:
 gh attestation verify hat-linux-amd64 --repo baodq97/hatrack
 ```
 
+The macOS app ships as `Hatrack-macos.zip`, with its own `Hatrack-macos.zip.sha256` and attestation.
+
 ### Update
 
 Run the install command again. On Windows it stops the running tray app first, since Windows locks a
-running exe.
+running exe. For the macOS app, quit Hatrack from the menu bar and replace `Hatrack.app` with the one
+from the new release.
 
 ## Getting started
 
@@ -115,6 +140,7 @@ Profile names default to the account's email. Pass a name to pick your own: `hat
 | `hat doctor` | Check Claude Code's setup. See [Doctor and clean](#doctor-and-clean). |
 | `hat clean` | Forget deleted folders Claude still remembers. |
 | `hat version` | Print the version. |
+
 
 ## Windows tray app
 
@@ -146,6 +172,22 @@ Quit
 
 The menu refreshes every few seconds, so changes made with `hat` show up on their own. Quitting the
 tray app changes nothing: Claude keeps using the last account you picked.
+
+## macOS menu bar app
+
+Hatrack.app puts a hat in the menu bar, with no Dock icon:
+
+- **Click an account** to switch to it. The check mark shows the active one.
+- **Open Full Dashboard** opens a window to switch, save, rename and remove accounts. It opens as an
+  app window if Chrome is installed, otherwise in your default browser.
+- **Add Account…** opens Terminal and runs `hat add` there, so you can pick the browser to sign in
+  with and paste the code if asked. The new account shows up in the menu when sign-in finishes.
+- **Save Current Account** keeps the login Claude has now.
+
+The dashboard is served only on `127.0.0.1`. Each launch makes a random token that only the window
+Hatrack opens receives, and every action must carry it, so other web pages cannot switch or remove
+accounts through it. If the dashboard says it has expired, open it again from the menu bar. To start
+Hatrack when you log in, add it in System Settings → General → Login Items.
 
 ## Adding an account
 
@@ -397,11 +439,36 @@ that is already open may keep the old account until you run **Developer: Reload 
 Windows and each WSL distro have their own home folder, so each has its own Claude login and its own
 saved accounts. Set up accounts on each side you use; switching on one side does not affect the other.
 
+## macOS
+
+On macOS Claude Code keeps its tokens in the login **Keychain**, not in a file, and hatrack follows
+the same order Claude does:
+
+1. **Keychain first.** Claude reads the generic password `Claude Code-credentials` (account: your
+   user name). If you set `CLAUDE_CONFIG_DIR`, the item is `Claude Code-credentials-<8 hex>` instead,
+   where the suffix is the start of the SHA-256 of that folder path.
+2. **`~/.claude/.credentials.json` only as a fallback**, when there is no Keychain item (for example
+   if the Keychain was locked or unavailable when Claude signed in).
+
+So on a Mac:
+
+- An old `.credentials.json` next to a Keychain item is ignored by Claude, and by hatrack too: it
+  saves and switches the Keychain item. Do not treat that file as your current login.
+- Switching always writes the Keychain, never the file. If the login was only in the file, hatrack
+  moves it into the Keychain and removes the file, the same thing Claude does when its Keychain
+  write succeeds. hatrack never falls back to writing tokens to a plain file on macOS; if the
+  Keychain write fails, the switch fails and says so.
+- `hat add` signs in with a scratch `CLAUDE_CONFIG_DIR`, so Claude puts the new tokens in their own
+  Keychain item. hatrack copies them out and deletes that scratch item.
+- hatrack calls `/usr/bin/security`, the same tool Claude uses, so macOS does not ask for Keychain
+  access. If a prompt does appear, it names `security`; allow it.
+- Saved logins in `~/.hatrack` are files (mode `0600`), not Keychain items.
+
 ## How it works
 
 A Claude Code login is two things:
 
-- `~/.claude/.credentials.json`: the OAuth tokens.
+- the OAuth tokens: `~/.claude/.credentials.json`, or on macOS the Keychain (see [macOS](#macos)).
 - the `oauthAccount` block in `~/.claude.json`: who the tokens belong to.
 
 (Both live under `$CLAUDE_CONFIG_DIR` if you set it.)
@@ -423,6 +490,8 @@ back as it was.
 - Claude rewrites `~/.claude.json` while it runs. If it changes while hat is editing it, hat redoes its
   edit on the new content instead of overwriting Claude's. Before each change, hat keeps a copy of the
   file in `~/.hatrack/backups` (the last 10).
+- `CLAUDE_SECURESTORAGE_CONFIG_DIR`, which moves only where Claude keeps tokens, is honored too, and is
+  left out of the environment of the sign-in that `hat add` runs.
 
 ## Security and privacy
 
@@ -434,12 +503,15 @@ back as it was.
   `~/.hatrack/mcp/disabled.json`, readable only by you. `hat mcp` and `show` hide secrets unless you
   pass `--reveal`; `export` writes them in full.
 - Saved logins are plain files, like Claude's own `.credentials.json`, readable only by your user
-  (mode `0600` on Linux; your user profile's permissions on Windows). Anyone who can read your home
-  folder can read them, just as with Claude's own login.
-- hatrack reads and writes Claude's login files, its MCP server settings and `~/.hatrack`. `hat usage`
-  only reads the token counts in Claude's transcripts, not what you wrote; `hat clean` changes only
-  what it listed, and only with `--apply`. It does not touch Claude's traffic, telemetry or anything else.
-- No telemetry, no accounts, no server.
+  (mode `0600` on Linux and macOS; your user profile's permissions on Windows). Anyone who can read
+  your home folder can read them, just as with Claude's own login. On macOS this means a saved login
+  is less protected than the active one, which Claude keeps in the Keychain.
+- hatrack reads and writes Claude's login files (on macOS, Claude's Keychain items), its MCP server
+  settings and `~/.hatrack`. `hat usage` only reads the token counts in Claude's transcripts, not what
+  you wrote; `hat clean` changes only what it listed, and only with `--apply`. It does not touch
+  Claude's traffic, telemetry or anything else.
+- No telemetry, no accounts, no server. The macOS dashboard is a local page on `127.0.0.1` that
+  needs a per-launch token, loads nothing from the internet, and stops when you quit Hatrack.
 
 Anthropic's terms do not allow sharing one subscription between people. hatrack is for switching
 between accounts that are yours. Found a security problem? See [SECURITY.md](SECURITY.md).
@@ -448,9 +520,10 @@ between accounts that are yours. Found a security problem? See [SECURITY.md](SEC
 
 - **Claude Code only** for now. Codex and other tools may come later. `hat mcp import --desktop` reads
   Claude Desktop's servers but does not change them.
-- The tray app shows user-scope MCP servers only; manage local and project ones with `hat mcp` in the folder.
+- The Windows tray shows user-scope MCP servers only; manage local and project ones with `hat mcp` in
+  the folder. On macOS, MCP servers, usage, doctor and clean are in the `hat` CLI.
 - `hat mcp test` speaks stdio and streamable HTTP; servers on the older `sse` transport show their state in Claude's `/mcp`.
-- **No macOS:** Claude keeps its login in the Keychain there, which hatrack does not handle.
+- **macOS app is not notarized**, so Gatekeeper asks before the first launch.
 - **Open sessions** may keep using the previous account until restarted.
 - **Saved logins are not refreshed** while not in use. One left unused long enough expires; add it again with `hat add`.
 - Claude Code may change how it stores logins, which can break hatrack until it is updated.
@@ -467,6 +540,7 @@ between accounts that are yours. Found a security problem? See [SECURITY.md](SEC
 | No tray icon | Check the `^` overflow arrow. If the app is not running, start `hatrack-tray.exe` and check `%USERPROFILE%\.hatrack\tray.log`. |
 | An MCP server does not show up in Claude | Restart Claude. Then `hat mcp doctor`, and `hat mcp test <name>` to see the server's own error. |
 | `hat mcp test` says the server asks to sign in | It uses OAuth: sign in from Claude with `/mcp`. Or check the token in its headers. |
+| `keychain …` error on macOS | Unlock the login Keychain (Keychain Access, or `security unlock-keychain`) and retry. Over SSH the Keychain is usually locked. |
 | `hat` not found right after installing on Windows | Open a new terminal so it picks up the updated `PATH`. |
 | Windows SmartScreen warns about the exe | The binaries are not code-signed. Verify them as shown in [Verify a download](#verify-a-download). |
 
@@ -485,21 +559,23 @@ Remove-Item "$HOME\.hatrack" -Recurse   # saved logins, switched-off MCP servers
 and remove `%LOCALAPPDATA%\hatrack` from your user `PATH` (Settings → System → About → Advanced system
 settings → Environment Variables).
 
-**Linux/WSL:**
+**macOS, Linux and WSL:** on macOS, quit Hatrack from the menu bar first.
 
 ```sh
 rm ~/.local/bin/hat
+rm -rf /Applications/Hatrack.app ~/Library/Caches/hatrack   # macOS app
 rm -r ~/.hatrack   # saved logins, switched-off MCP servers, sets, switch history, backups
 ```
 
 ## Build from source
 
-Needs Go (see `go.mod` for the version). No C compiler is needed.
+Needs Go (see `go.mod` for the version). No C compiler is needed, except for the macOS app.
 
 ```sh
 go test ./...
 go build ./cmd/hat                                                         # CLI for this OS
 GOOS=windows go build -ldflags -H=windowsgui -o hatrack-tray.exe ./cmd/hatrack-tray  # tray, from any OS
+./build-mac-app.sh                                                         # Hatrack.app, on a Mac
 ```
 
 Layout:
@@ -507,10 +583,13 @@ Layout:
 ```
 cmd/hat/              CLI
 cmd/hatrack-tray/     Windows tray app
+cmd/hatrack-gui/      macOS menu bar app
 internal/claude/      Claude logins: save, swap, switch history, forgetting deleted folders
-internal/usage/       token usage from Claude's transcripts
 internal/mcp/         MCP servers: scopes, on/off, catalog, sets, test
+internal/usage/       token usage from Claude's transcripts
 internal/atomicfile/  crash-safe file writes
+internal/gui/         the macOS dashboard: a local page and its API
+internal/tray/        the macOS menu bar
 ```
 
 Releases are built by [.github/workflows/release.yml](.github/workflows/release.yml) when a `v*` tag is

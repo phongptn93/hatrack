@@ -23,6 +23,7 @@ jobs:
           ld="-s -w -X main.version=$GITHUB_REF_NAME"
           for arch in amd64 arm64; do
             GOOS=linux GOARCH=$arch go build -trimpath -ldflags "$ld" -o dist/hat-linux-$arch ./cmd/hat
+            GOOS=darwin GOARCH=$arch go build -trimpath -ldflags "$ld" -o dist/hat-darwin-$arch ./cmd/hat
             GOOS=windows GOARCH=$arch go build -trimpath -ldflags "$ld" -o dist/hat-windows-$arch.exe ./cmd/hat
             GOOS=windows GOARCH=$arch go build -trimpath -ldflags "$ld -H windowsgui" -o dist/hatrack-tray-windows-$arch.exe ./cmd/hatrack-tray
           done
@@ -31,5 +32,29 @@ jobs:
         with:
           subject-path: dist/*
       - run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # the menu bar app links Cocoa through cgo, so it is built on a Mac
+  mac-app:
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: build
+        env:
+          NO_INSTALL: '1'
+          VERSION: ${{ github.ref_name }}
+        run: |
+          ./build-mac-app.sh
+          ditto -c -k --keepParent Hatrack.app Hatrack-macos.zip
+          shasum -a 256 Hatrack-macos.zip > Hatrack-macos.zip.sha256
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: Hatrack-macos.zip
+      - run: gh release upload "$GITHUB_REF_NAME" Hatrack-macos.zip Hatrack-macos.zip.sha256
         env:
           GH_TOKEN: ${{ github.token }}

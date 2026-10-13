@@ -9,9 +9,11 @@ gofmt -l .        # prints nothing
 go vet ./...
 go test ./...
 GOOS=windows go vet ./...   # the tray app only builds for Windows
+GOOS=darwin go vet ./cmd/hat ./internal/claude ./internal/gui   # macOS keychain code; the menu bar app needs a Mac
 ```
 
-CI runs the same on Linux and Windows.
+CI runs the same on Linux, Windows and macOS. On a Mac, `HATRACK_KEYCHAIN_TEST=1 go test ./...` also
+round-trips a throwaway item through the real login keychain.
 
 ## Ground rules
 

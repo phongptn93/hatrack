@@ -65,6 +65,10 @@ func TestSwitchHistory(t *testing.T) {
 	if cur.Name != "b@x.com" {
 		t.Fatalf("current: %+v", cur)
 	}
+	must(t, s.Rename("b@x.com", "work")) // usage follows the account to its new name
+	if h, _ := s.Switches(); h[1].Account != "work" || h[0].Account != "a@x.com" {
+		t.Fatalf("history after rename: %+v", h)
+	}
 }
 
 func readFile(t *testing.T, p string) string {

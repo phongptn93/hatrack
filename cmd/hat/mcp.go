@@ -628,19 +628,6 @@ func useSet(c *mcp.Config, name string) error {
 	return nil
 }
 
-// useLinkedSet applies the MCP set linked to an account hat just switched to.
-func useLinkedSet(account string) error {
-	c, err := mcp.Default("")
-	if err != nil {
-		return err
-	}
-	set, ok, err := c.SetFor(account)
-	if err != nil || !ok {
-		return err
-	}
-	return useSet(c, set.Name)
-}
-
 func kv(items []string, sep string) (map[string]string, error) {
 	if len(items) == 0 {
 		return nil, nil

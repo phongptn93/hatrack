@@ -178,14 +178,7 @@ func tokens(v int64) string {
 
 // use switches account, then to the MCP set linked to it, if any.
 func (t *tray) use(name string) error {
-	if err := t.s.Use(name); err != nil || t.m == nil {
-		return err
-	}
-	set, ok, err := t.m.SetFor(name)
-	if err != nil || !ok {
-		return err
-	}
-	_, err = t.m.UseSet(set.Name)
+	_, _, err := mcp.SwitchAccount(t.s, name)
 	return err
 }
 

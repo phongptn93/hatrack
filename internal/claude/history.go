@@ -67,3 +67,23 @@ func AccountAt(h []Switch, t time.Time) string {
 	}
 	return acct
 }
+
+// renameInHistory rewrites the history so usage follows an account to its new name.
+func (s *Store) renameInHistory(oldName, newName string) error {
+	h, err := s.Switches()
+	if err != nil || len(h) == 0 {
+		return err
+	}
+	var buf []byte
+	for _, w := range h {
+		if w.Account == oldName {
+			w.Account = newName
+		}
+		b, err := json.Marshal(w)
+		if err != nil {
+			return err
+		}
+		buf = append(append(buf, b...), '\n')
+	}
+	return writeAtomic(s.historyPath(), buf)
+}

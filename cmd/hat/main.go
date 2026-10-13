@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/baodq97/hatrack/internal/claude"
+	"github.com/baodq97/hatrack/internal/mcp"
 )
 
 const helpText = `hat - switch Claude Code accounts and manage its MCP servers
@@ -79,12 +81,16 @@ func run(args []string) error {
 		}
 		return nil
 	case cmd == "use" && arg != "":
-		if err := s.Use(arg); err != nil {
+		set, changed, err := mcp.SwitchAccount(s, arg)
+		if err != nil && set == "" {
 			return err
 		}
 		fmt.Printf("now using %s. If an open Claude session still shows the old account, restart it (VS Code: Reload Window).\n", arg)
-		if err := useLinkedSet(arg); err != nil {
-			return fmt.Errorf("switched account, but its MCP set: %w", err)
+		if err != nil {
+			return fmt.Errorf("switched account, but MCP set %s: %w", set, err)
+		}
+		if set != "" {
+			fmt.Printf("MCP set %s: %s\n", set, strings.Join(append([]string{}, changed...), " "))
 		}
 		return nil
 	case cmd == "add":
@@ -131,7 +137,12 @@ func add(s *claude.Store, name string) error {
 	fmt.Print(addPrompt)
 	var choice string
 	fmt.Scanln(&choice)
-	env := os.Environ()
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, claude.SecureStorageEnv+"=") {
+			env = append(env, kv)
+		}
+	}
 	switch choice {
 	case "1":
 	case "2":

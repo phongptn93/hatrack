@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hatrack - Claude Account Switcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="background-glow glow-1"></div>
+  <div class="background-glow glow-2"></div>
+  
+  <div class="app-container">
+    <!-- Header Navbar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">🎩</div>
+        <div class="brand-text">
+          <h1>Hatrack</h1>
+          <span class="badge-sub">Claude Account Switcher</span>
+        </div>
+      </div>
+
+      <div class="search-bar-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search profiles by name, email or org..." />
+      </div>
+
+      <div class="header-actions">
+        <button id="btnSaveCurrent" class="btn btn-secondary" title="Save current active session">
+          <span class="icon">💾</span> Save Session
+        </button>
+        <button id="btnAddAccount" class="btn btn-primary" title="Add a new Claude account">
+          <span class="icon">✨</span> Add Account
+        </button>
+        <button id="btnRefresh" class="btn btn-icon" title="Refresh profiles">
+          <span class="icon">🔄</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Active Account Hero Banner -->
+      <section id="activeHero" class="active-hero hidden">
+        <div class="hero-glass">
+          <div class="hero-status">
+            <span class="status-pulse"></span>
+            <span class="status-text">Active Claude Account</span>
+          </div>
+          <div class="hero-details">
+            <div class="hero-info">
+              <h2 id="activeProfileName">--</h2>
+              <div class="hero-meta">
+                <span id="activeProfileEmail" class="email-mono">--</span>
+                <span id="activeProfileOrg" class="org-pill">--</span>
+              </div>
+            </div>
+            <div class="hero-action">
+              <span class="active-badge-large">CURRENTLY IN USE</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Account Cards Section -->
+      <section class="profiles-section">
+        <div class="section-header">
+          <h3>Saved Accounts (<span id="accountCount">0</span>)</h3>
+        </div>
+
+        <div id="profilesGrid" class="profiles-grid">
+          <!-- Profiles will be dynamically rendered here -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading accounts...</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Modal: Add Account -->
+  <div id="modalAdd" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>✨ Add New Claude Account</h3>
+        <button class="modal-close" data-close="modalAdd">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Sign-in continues in a Terminal window, where you choose which browser to sign in with. Your current account stays signed in.
+        </p>
+        <div class="form-group">
+          <label for="newProfileAlias">Profile Alias (Optional):</label>
+          <input type="text" id="newProfileAlias" placeholder="e.g. work-account, personal-pro" />
+          <small>Leave blank to default to your account email address.</small>
+        </div>
+        
+        <div id="addStatusContainer" class="add-status hidden">
+          <div class="spinner small"></div>
+          <span id="addStatusText">Opening Terminal...</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalAdd">Cancel</button>
+        <button id="btnConfirmAdd" class="btn btn-primary">Open Terminal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Rename Profile -->
+  <div id="modalRename" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>✏️ Rename Profile</h3>
+        <button class="modal-close" data-close="modalRename">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="renameOldName" />
+        <div class="form-group">
+          <label for="renameNewName">New Profile Name:</label>
+          <input type="text" id="renameNewName" placeholder="Enter new name..." />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalRename">Cancel</button>
+        <button id="btnConfirmRename" class="btn btn-primary">Save Name</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Delete Confirmation -->
+  <div id="modalDelete" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🗑️ Delete Account Profile</h3>
+        <button class="modal-close" data-close="modalDelete">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="deleteTargetName" />
+        <p>Are you sure you want to delete profile <strong id="deleteTargetLabel"></strong>?</p>
+        <p class="text-warning">This removes saved credentials for this profile locally. You can re-add it anytime.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalDelete">Cancel</button>
+        <button id="btnConfirmDelete" class="btn btn-danger">Delete Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 // Package claude parks and swaps Claude Code logins so one machine can switch accounts
-// without signing out. A login is the credentials file plus the oauthAccount block of
-// .claude.json; everything else (settings, history, projects) stays shared.
+// without signing out. A login is the OAuth tokens (the macOS keychain, else the credentials
+// file) plus the oauthAccount block of .claude.json; everything else (settings, history,
+// projects) stays shared.
 package claude
 
 import (
@@ -29,11 +30,17 @@ var (
 	validName      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@+-]{0,63}$`)
 )
 
+// ValidName reports whether name can name a profile: no paths, no leading dot.
+func ValidName(name string) bool { return validName.MatchString(name) }
+
 // Store knows where Claude reads its login and where parked logins live.
 type Store struct {
 	ConfigDir  string // holds .credentials.json
 	GlobalJSON string // .claude.json, holds oauthAccount
 	Dir        string // parked logins, one folder per profile
+	// Keychain is set on macOS, where Claude reads Service from it before .credentials.json.
+	Keychain Keychain
+	Service  string
 }
 
 type Profile struct {
@@ -65,12 +72,25 @@ func Default() (*Store, error) {
 		ConfigDir:  filepath.Join(home, ".claude"),
 		GlobalJSON: filepath.Join(home, ".claude.json"),
 		Dir:        filepath.Join(home, ".hatrack", "claude"),
+		Keychain:   systemKeychain(),
+		Service:    keychainBase,
 	}
 	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		s.ConfigDir, s.GlobalJSON = d, filepath.Join(d, ".claude.json")
+		s.ConfigDir, s.GlobalJSON, s.Service = d, filepath.Join(d, ".claude.json"), keychainService(d)
+	}
+	// Claude's override for where tokens alone are kept; set but empty means the defaults
+	if d, ok := os.LookupEnv(SecureStorageEnv); ok {
+		s.ConfigDir, s.Service = filepath.Join(home, ".claude"), keychainBase
+		if d != "" {
+			s.ConfigDir, s.Service = d, keychainService(d)
+		}
 	}
 	return s, nil
 }
+
+// SecureStorageEnv moves where Claude keeps its tokens. A sign-in for hat add must not
+// inherit it, or it would replace the active login.
+const SecureStorageEnv = "CLAUDE_SECURESTORAGE_CONFIG_DIR"
 
 // List returns parked profiles sorted by name, marking the one Claude is signed in to.
 func (s *Store) List() ([]Profile, error) {
@@ -92,7 +112,7 @@ func (s *Store) List() ([]Profile, error) {
 			continue // half-written or foreign folder
 		}
 		out = append(out, Profile{Name: e.Name(), Email: a.EmailAddress, Org: a.OrganizationName,
-			Plan: plan(filepath.Join(s.Dir, e.Name(), parkedCreds)), Active: curErr == nil && a.same(cur)})
+			Plan: parkedPlan(filepath.Join(s.Dir, e.Name(), parkedCreds)), Active: curErr == nil && a.same(cur)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -100,23 +120,25 @@ func (s *Store) List() ([]Profile, error) {
 
 // Save parks the login Claude is signed in to now. An empty name means the account's email.
 func (s *Store) Save(name string) (string, error) {
-	name, err := s.park(name, filepath.Join(s.ConfigDir, credsFile), s.GlobalJSON)
+	creds, err := s.readCreds(s.Service, s.ConfigDir)
+	if err != nil {
+		return "", err
+	}
+	name, err = s.park(name, creds, s.GlobalJSON)
 	if err == nil {
 		s.logSwitch(name) // it is in use now; usage from here on counts for it
 	}
 	return name, err
 }
 
-// plan reads the subscription type from a credentials file; tokens are not looked at.
-func plan(path string) string {
+// plan reads the subscription type from credentials; the tokens are not looked at.
+func plan(creds []byte) string {
 	var c struct {
 		ClaudeAiOauth struct {
 			SubscriptionType string `json:"subscriptionType"`
 		} `json:"claudeAiOauth"`
 	}
-	if b, err := os.ReadFile(path); err == nil {
-		json.Unmarshal(b, &c)
-	}
+	json.Unmarshal(creds, &c)
 	return c.ClaudeAiOauth.SubscriptionType
 }
 
@@ -140,10 +162,18 @@ func (s *Store) Add(name string, login func(configDir string) error) (string, er
 		return "", err
 	}
 	defer os.RemoveAll(tmp)
+	service := keychainService(tmp)
+	if s.Keychain != nil {
+		defer s.Keychain.Delete(service) // Claude put the new tokens in a keychain item of their own
+	}
 	if err := login(tmp); err != nil {
 		return "", fmt.Errorf("sign-in: %w", err)
 	}
-	return s.park(name, filepath.Join(tmp, credsFile), filepath.Join(tmp, ".claude.json"))
+	creds, err := s.readCreds(service, tmp)
+	if err != nil {
+		return "", err
+	}
+	return s.park(name, creds, filepath.Join(tmp, ".claude.json"))
 }
 
 // Use makes name the login Claude reads. The current login is parked first, so tokens
@@ -168,7 +198,7 @@ func (s *Store) Use(name string) error {
 	if err != nil {
 		return fmt.Errorf("profile %q: %w", name, err)
 	}
-	if err := writeAtomic(filepath.Join(s.ConfigDir, credsFile), creds); err != nil {
+	if err := s.writeCreds(creds); err != nil {
 		return err
 	}
 	if err := s.setAccount(raw); err != nil {
@@ -189,6 +219,26 @@ func (s *Store) Remove(name string) error {
 	return os.RemoveAll(dir)
 }
 
+// Rename gives a saved account another name. The active login is not touched.
+func (s *Store) Rename(oldName, newName string) error {
+	for _, n := range []string{oldName, newName} {
+		if !validName.MatchString(n) {
+			return fmt.Errorf("bad profile name %q", n)
+		}
+	}
+	if _, err := s.parkedAccount(oldName); err != nil {
+		return fmt.Errorf("profile %q: %w", oldName, err)
+	}
+	newDir := filepath.Join(s.Dir, newName)
+	if _, err := os.Lstat(newDir); err == nil {
+		return fmt.Errorf("profile %q already exists", newName)
+	}
+	if err := os.Rename(filepath.Join(s.Dir, oldName), newDir); err != nil {
+		return err
+	}
+	return s.renameInHistory(oldName, newName)
+}
+
 // parkCurrent writes the active login back into its profile, creating one if none matches.
 func (s *Store) parkCurrent() error {
 	_, cur, err := readAccount(s.GlobalJSON)
@@ -198,7 +248,7 @@ func (s *Store) parkCurrent() error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(s.ConfigDir, credsFile)); errors.Is(err, os.ErrNotExist) {
+	if _, err := s.readCreds(s.Service, s.ConfigDir); errors.Is(err, ErrNotSignedIn) {
 		return nil
 	}
 	ps, err := s.List()
@@ -219,14 +269,47 @@ func (s *Store) parkCurrent() error {
 	return err
 }
 
-func (s *Store) park(name, credsPath, jsonPath string) (string, error) {
-	creds, err := os.ReadFile(credsPath)
+// readCreds reads the tokens Claude uses for a config dir the way Claude does: the keychain
+// item first, the credentials file only when there is no item.
+func (s *Store) readCreds(service, dir string) ([]byte, error) {
+	if s.Keychain != nil {
+		b, err := s.Keychain.Get(service)
+		if err != nil || b != nil {
+			return b, err
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(dir, credsFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return "", ErrNotSignedIn
+		return nil, ErrNotSignedIn
 	}
+	return b, err
+}
+
+// writeCreds puts tokens where Claude reads them. With a keychain that is the keychain item,
+// never the file: writing tokens to disk where Claude did not would be a silent downgrade.
+// Like Claude, it drops the credentials file once the keychain takes over from it.
+func (s *Store) writeCreds(creds []byte) error {
+	path := filepath.Join(s.ConfigDir, credsFile)
+	if s.Keychain == nil {
+		return writeAtomic(path, creds)
+	}
+	old, err := s.Keychain.Get(s.Service)
 	if err != nil {
-		return "", err
+		return err
 	}
+	if err := s.Keychain.Set(s.Service, creds); err != nil {
+		return err
+	}
+	if old == nil {
+		// the file was the active login; parkCurrent has saved it
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) park(name string, creds []byte, jsonPath string) (string, error) {
 	raw, acct, err := readAccount(jsonPath)
 	if err != nil {
 		return "", err
@@ -329,13 +412,19 @@ const backups = 10
 
 var writeAtomic = atomicfile.Write
 
+func parkedPlan(path string) string {
+	b, _ := os.ReadFile(path)
+	return plan(b)
+}
+
 // Current describes the login Claude uses now. Name is the saved profile holding it, if any.
 func (s *Store) Current() (Profile, error) {
 	_, a, err := readAccount(s.GlobalJSON)
 	if err != nil {
 		return Profile{}, err
 	}
-	p := Profile{Email: a.EmailAddress, Org: a.OrganizationName, Plan: plan(filepath.Join(s.ConfigDir, credsFile)), Active: true}
+	creds, _ := s.readCreds(s.Service, s.ConfigDir) // the keychain on macOS, else the file
+	p := Profile{Email: a.EmailAddress, Org: a.OrganizationName, Plan: plan(creds), Active: true}
 	if ps, err := s.List(); err == nil {
 		for _, q := range ps {
 			if q.Active {
