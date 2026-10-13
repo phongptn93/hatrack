@@ -206,16 +206,16 @@ func mcpCatalog(c *mcp.Config) error {
 	for _, t := range ts {
 		if t.Category != cat {
 			if cat != "" {
-				fmt.Fprintln(w, "\t\t")
+				fmt.Fprintln(w)
 			}
 			cat = t.Category
-			fmt.Fprintf(w, "%s\t\t\n", strings.ToUpper(cat))
+			fmt.Fprintln(w, strings.ToUpper(cat))
 		}
-		desc := t.Description
+		pub := t.Publisher
 		if t.Custom {
-			desc += "  [your catalog]"
+			pub = "your catalog"
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", t.Name, t.Title, desc)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", t.Name, t.Title, pub, t.Description)
 	}
 	w.Flush()
 	fmt.Println("\nAdd one with: hat mcp add <name> --from <template>")

@@ -176,9 +176,9 @@ the narrowest (local, then project, then user); `hat mcp` shows the others as `h
 ```
 $ hat mcp
 SCOPE    NAME          STATE  TYPE   TARGET
-user     azure-devops  on     stdio  npx -y @azure-devops/mcp contoso
+user     azure-devops  on     http   https://mcp.dev.azure.com/contoso
 user     github        on     http   https://api.githubcopilot.com/mcp/
-user     postgres      off    stdio  uvx postgres-mcp --access-mode=restricted
+user     postgres      off    stdio  npx -y @toolbox-sdk/server --prebuilt postgres --stdio
 project  team-db       on     stdio  npx -y @bytebase/dbhub --transport stdio --dsn sqlserver://app:****@db:1433/app
 ```
 
@@ -198,7 +198,7 @@ when it starts.
 | `hat mcp off <name>` / `on <name>` | Switch a server off and back on. Its config is kept. |
 | `hat mcp rm <name>` | Delete a server. |
 | `hat mcp test [name]` | Start servers the way Claude would, run the MCP handshake and list their tools. |
-| `hat mcp doctor` | Find servers that cannot start (missing `npx`/`uvx`, unfilled values, unset `${VARS}`) without starting them. |
+| `hat mcp doctor` | Find servers that cannot start (missing `npx`/`uvx`, unfilled values, unset `${VARS}`, retired `sse` endpoints) without starting them. |
 | `hat mcp export [-o file]` | Write a scope's servers to a `.mcp.json`-style file, to back them up or move them to another machine. |
 | `hat mcp import <file>` | Add servers from such a file. `--desktop` imports Claude Desktop's servers. |
 | `hat mcp set …` | Groups of servers. See below. |
@@ -208,31 +208,57 @@ same name.
 
 ### Catalog
 
-| Category | Templates |
-|---|---|
-| database | `postgres`, `mysql`, `mssql` (SQL Server, Azure SQL), `sqlserver` (DBHub: SQL Server, PostgreSQL, MySQL, MariaDB, SQLite), `mongodb`, `redis`, `sqlite` |
-| devops | `azure-devops`, `azure`, `github`, `atlassian` (Jira, Confluence), `linear`, `sentry` |
-| docs | `context7`, `notion` |
-| tools | `playwright`, `filesystem`, `fetch`, `memory` |
+Each template points at a server that is published by its vendor where one exists, still
+maintained, and was started and listed with `hat mcp test` when the template was written; database
+templates were also run against a real database. `hat mcp catalog` shows who publishes each one.
+
+| Template | Server | Publisher | Notes |
+|---|---|---|---|
+| `postgres` | [MCP Toolbox](https://mcp-toolbox.dev) `--prebuilt postgres` | Google | 29 tools: queries, tables, query plans, locks, health |
+| `mssql` | [mssql-mcp](https://github.com/BYMCS/mssql-mcp) | community | SQL Server and Azure SQL, SQL login only (no Windows authentication) |
+| `mysql` | [mcp-server-mysql](https://github.com/benborla/mcp-server-mysql) | community | read-only unless writes are allowed |
+| `sqlite` | MCP Toolbox `--prebuilt sqlite` | Google | |
+| `mongodb` | [mongodb-mcp-server](https://github.com/mongodb-js/mongodb-mcp-server) `--readOnly` | MongoDB | |
+| `redis` | [mcp-redis](https://github.com/redis/mcp-redis) | Redis | needs uv |
+| `dbhub` | [DBHub](https://github.com/bytebase/dbhub) | Bytebase | any SQL database from one DSN; URL-encode special characters in the password |
+| `azure-devops` | [Remote MCP Server](https://learn.microsoft.com/azure/devops/mcp-server/remote-mcp-server) | Microsoft | hosted, the one Microsoft recommends; sign in with `/mcp` in Claude |
+| `azure-devops-local` | [azure-devops-mcp](https://github.com/microsoft/azure-devops-mcp) | Microsoft | runs locally; Linux and WSL need `libsecret` (`sudo apt install libsecret-1-0`) |
+| `azure` | [Azure MCP](https://github.com/microsoft/mcp) | Microsoft | uses your Azure CLI login |
+| `github` | [GitHub MCP](https://github.com/github/github-mcp-server) | GitHub | hosted; takes a personal access token |
+| `atlassian` | [Atlassian MCP](https://github.com/atlassian/atlassian-mcp-server) `/v2/mcp` | Atlassian | Jira and Confluence; sign in with `/mcp` |
+| `linear`, `sentry`, `notion` | the vendor's hosted server | vendor | sign in with `/mcp` |
+| `context7` | hosted | Upstash | library docs |
+| `playwright` | [Playwright MCP](https://github.com/microsoft/playwright-mcp) | Microsoft | |
+| `filesystem`, `fetch`, `memory` | [reference servers](https://github.com/modelcontextprotocol/servers) | MCP project | `fetch` needs uv |
 
 ```
 $ hat mcp add ado --from azure-devops
 Azure DevOps needs a few values (or pass them with --var NAME=value):
   Organization, e.g. contoso for dev.azure.com/contoso: contoso
-added user-scope MCP server ado: npx -y @azure-devops/mcp contoso
+added user-scope MCP server ado: https://mcp.dev.azure.com/contoso
 
-$ hat mcp add prod-db -s local --from postgres
-PostgreSQL needs a few values (or pass them with --var NAME=value):
-  Connection string, e.g. postgresql://user:pass@localhost:5432/db: ********
-added local-scope MCP server prod-db: uvx postgres-mcp --access-mode=restricted
+$ hat mcp add erp -s local --from mssql
+SQL Server needs a few values (or pass them with --var NAME=value):
+  Server, e.g. localhost or myserver.database.windows.net: sql01
+  Port [1433]:
+  Database: ERP
+  SQL login (best a read-only one): app_ro
+  Password: ********
+  Trust a self-signed server certificate? true/false [false]: true
+added local-scope MCP server erp: npx -y mssql-mcp@latest
 ```
 
-Database templates are read-only where the server supports it. `mssql` is not: it can run any SQL,
-so give it a login that can only read (`db_datareader`). It signs in with a SQL login only, not
-Windows authentication. Each server is published by its own
-maintainer (see the link `add` prints) and runs with your permissions; hatrack only writes the config
-Claude starts it with. Servers started with `npx` need [Node.js](https://nodejs.org), those with `uvx`
-need [uv](https://docs.astral.sh/uv/). On Windows, `npx` is started through `cmd /c`, as Claude needs.
+**Give database servers a read-only login.** Only `mysql` and `mongodb` refuse writes themselves;
+the others run whatever SQL Claude sends, within what the login may do (`db_datareader` on SQL
+Server, `GRANT SELECT` on PostgreSQL). Servers that connect when they start (`postgres`, `sqlite`,
+`dbhub`) hold up Claude's start while their database is unreachable: switch them off with
+`hat mcp off` when you are away from it.
+
+Each server is published by its own maintainer (see the link `add` prints) and runs with your
+permissions; hatrack only writes the config Claude starts it with. Templates follow the latest
+release of each server, so run `hat mcp test` after adding one. Servers started with `npx` need
+[Node.js](https://nodejs.org), those with `uvx` need [uv](https://docs.astral.sh/uv/). On Windows, `npx`
+is started through `cmd /c`, as Claude needs.
 
 **Keep secrets out of the config:** type `${NAME}` instead of a value (`--var 'GITHUB_TOKEN=${GITHUB_TOKEN}'`)
 and Claude fills it from its environment when it starts the server. `hat mcp doctor` warns when such a

@@ -39,6 +39,9 @@ func Check(s Server) []string {
 		if !validURL(x.URL) {
 			issues = append(issues, fmt.Sprintf("bad URL %q", sp.URL))
 		}
+		if sp.Kind() == "sse" {
+			issues = append(issues, "the sse transport is being retired (Atlassian and Linear have dropped it); ask the provider for its streamable HTTP URL, usually ending in /mcp")
+		}
 	default:
 		issues = append(issues, fmt.Sprintf("unknown type %q", sp.Type))
 	}

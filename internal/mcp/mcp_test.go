@@ -166,8 +166,15 @@ func TestCatalogRender(t *testing.T) {
 	}
 	sp, err := ado.Render(map[string]string{"ADO_ORG": "contoso"}, "windows")
 	must(t, err)
+	if got := sp.Target(); sp.Kind() != "http" || got != "https://mcp.dev.azure.com/contoso" {
+		t.Fatalf("ado: %s %q", sp.Kind(), got)
+	}
+	local, err := c.Template("azure-devops-local")
+	must(t, err)
+	sp, err = local.Render(map[string]string{"ADO_ORG": "contoso"}, "windows")
+	must(t, err)
 	if got := sp.Target(); got != "cmd /c npx -y @azure-devops/mcp contoso" {
-		t.Fatalf("windows ado: %q", got)
+		t.Fatalf("windows ado local: %q", got)
 	}
 	my, err := c.Template("mysql")
 	must(t, err)

@@ -12,6 +12,7 @@ type Template struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`
 	Category    string `json:"category,omitempty"`
+	Publisher   string `json:"publisher,omitempty"` // who publishes the server: its vendor, or community
 	Description string `json:"description,omitempty"`
 	Docs        string `json:"docs,omitempty"`
 	Server      Spec   `json:"server"`
@@ -26,21 +27,45 @@ type Var struct {
 	Secret  bool   `json:"secret,omitempty"` // typed without echo, never printed
 }
 
-// builtin lists servers people commonly add. Each runs as published by its maintainer;
-// hatrack only writes the config Claude starts it with.
+// builtin lists servers people commonly add, each checked against its maintainer's docs and run
+// with `hat mcp test`. Each runs as its maintainer publishes it; hatrack only writes the config
+// Claude starts it with. Prefer servers published by the vendor and still maintained.
 var builtin = []Template{
 	// databases
 	{
-		Name: "postgres", Title: "PostgreSQL", Category: "database",
-		Description: "Query and inspect a PostgreSQL database, read-only (Postgres MCP Pro, needs uv)",
-		Docs:        "https://github.com/crystaldba/postgres-mcp",
-		Server: Spec{Type: "stdio", Command: "uvx", Args: []string{"postgres-mcp", "--access-mode=restricted"},
-			Env: map[string]string{"DATABASE_URI": "{{DATABASE_URI}}"}},
-		Vars: []Var{{Name: "DATABASE_URI", Prompt: "Connection string, e.g. postgresql://user:pass@localhost:5432/db", Secret: true}},
+		Name: "postgres", Title: "PostgreSQL", Category: "database", Publisher: "Google (MCP Toolbox)",
+		Description: "Query, list tables, query plans, locks and health; give it a read-only login",
+		Docs:        "https://mcp-toolbox.dev",
+		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@toolbox-sdk/server", "--prebuilt", "postgres", "--stdio"},
+			Env: map[string]string{"POSTGRES_HOST": "{{POSTGRES_HOST}}", "POSTGRES_PORT": "{{POSTGRES_PORT}}", "POSTGRES_DATABASE": "{{POSTGRES_DATABASE}}",
+				"POSTGRES_USER": "{{POSTGRES_USER}}", "POSTGRES_PASSWORD": "{{POSTGRES_PASSWORD}}"}},
+		Vars: []Var{
+			{Name: "POSTGRES_HOST", Prompt: "Host", Default: "localhost"},
+			{Name: "POSTGRES_PORT", Prompt: "Port", Default: "5432"},
+			{Name: "POSTGRES_DATABASE", Prompt: "Database"},
+			{Name: "POSTGRES_USER", Prompt: "User (best a read-only one)"},
+			{Name: "POSTGRES_PASSWORD", Prompt: "Password", Secret: true},
+		},
 	},
 	{
-		Name: "mysql", Title: "MySQL / MariaDB", Category: "database",
-		Description: "Query a MySQL or MariaDB database; writes stay off unless you allow them",
+		Name: "mssql", Title: "SQL Server", Category: "database", Publisher: "community (BYMCS)",
+		Description: "SQL Server or Azure SQL with a SQL login; it can run any SQL, so give it a read-only login",
+		Docs:        "https://github.com/BYMCS/mssql-mcp",
+		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "mssql-mcp@latest"},
+			Env: map[string]string{"DB_SERVER": "{{DB_SERVER}}", "DB_PORT": "{{DB_PORT}}", "DB_DATABASE": "{{DB_DATABASE}}",
+				"DB_USER": "{{DB_USER}}", "DB_PASSWORD": "{{DB_PASSWORD}}", "DB_TRUST_SERVER_CERTIFICATE": "{{DB_TRUST_SERVER_CERTIFICATE}}"}},
+		Vars: []Var{
+			{Name: "DB_SERVER", Prompt: "Server, e.g. localhost or myserver.database.windows.net"},
+			{Name: "DB_PORT", Prompt: "Port", Default: "1433"},
+			{Name: "DB_DATABASE", Prompt: "Database"},
+			{Name: "DB_USER", Prompt: "SQL login (best a read-only one)"},
+			{Name: "DB_PASSWORD", Prompt: "Password", Secret: true},
+			{Name: "DB_TRUST_SERVER_CERTIFICATE", Prompt: "Trust a self-signed server certificate? true/false", Default: "false"},
+		},
+	},
+	{
+		Name: "mysql", Title: "MySQL / MariaDB", Category: "database", Publisher: "community (benborla)",
+		Description: "Query MySQL or MariaDB; read-only unless you allow writes",
 		Docs:        "https://github.com/benborla/mcp-server-mysql",
 		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@benborla29/mcp-server-mysql"},
 			Env: map[string]string{"MYSQL_HOST": "{{MYSQL_HOST}}", "MYSQL_PORT": "{{MYSQL_PORT}}", "MYSQL_USER": "{{MYSQL_USER}}",
@@ -54,30 +79,15 @@ var builtin = []Template{
 		},
 	},
 	{
-		Name: "mssql", Title: "SQL Server", Category: "database",
-		Description: "Query SQL Server or Azure SQL with a SQL login; use a read-only login, it can run any SQL",
-		Docs:        "https://github.com/BYMCS/mssql-mcp",
-		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "mssql-mcp@latest"},
-			Env: map[string]string{"DB_SERVER": "{{DB_SERVER}}", "DB_PORT": "{{DB_PORT}}", "DB_DATABASE": "{{DB_DATABASE}}",
-				"DB_USER": "{{DB_USER}}", "DB_PASSWORD": "{{DB_PASSWORD}}", "DB_TRUST_SERVER_CERTIFICATE": "{{DB_TRUST_SERVER_CERTIFICATE}}"}},
-		Vars: []Var{
-			{Name: "DB_SERVER", Prompt: "Server, e.g. localhost or myserver.database.windows.net"},
-			{Name: "DB_PORT", Prompt: "Port", Default: "1433"},
-			{Name: "DB_DATABASE", Prompt: "Database"},
-			{Name: "DB_USER", Prompt: "SQL login"},
-			{Name: "DB_PASSWORD", Prompt: "Password", Secret: true},
-			{Name: "DB_TRUST_SERVER_CERTIFICATE", Prompt: "Trust a self-signed server certificate? true/false", Default: "false"},
-		},
+		Name: "sqlite", Title: "SQLite", Category: "database", Publisher: "Google (MCP Toolbox)",
+		Description: "Query a local SQLite file",
+		Docs:        "https://mcp-toolbox.dev",
+		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@toolbox-sdk/server", "--prebuilt", "sqlite", "--stdio"},
+			Env: map[string]string{"SQLITE_DATABASE": "{{SQLITE_DATABASE}}"}},
+		Vars: []Var{{Name: "SQLITE_DATABASE", Prompt: "Full path to the .db file"}},
 	},
 	{
-		Name: "sqlserver", Title: "SQL Server and other SQL databases (DBHub)", Category: "database",
-		Description: "One server for SQL Server, PostgreSQL, MySQL, MariaDB and SQLite, picked by the DSN",
-		Docs:        "https://github.com/bytebase/dbhub",
-		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@bytebase/dbhub", "--transport", "stdio", "--dsn", "{{DSN}}"}},
-		Vars:        []Var{{Name: "DSN", Prompt: "DSN, e.g. sqlserver://user:pass@localhost:1433/db", Secret: true}},
-	},
-	{
-		Name: "mongodb", Title: "MongoDB", Category: "database",
+		Name: "mongodb", Title: "MongoDB", Category: "database", Publisher: "MongoDB",
 		Description: "Query a MongoDB database or Atlas cluster, read-only",
 		Docs:        "https://github.com/mongodb-js/mongodb-mcp-server",
 		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "mongodb-mcp-server", "--readOnly"},
@@ -85,35 +95,42 @@ var builtin = []Template{
 		Vars: []Var{{Name: "CONNECTION_STRING", Prompt: "Connection string, e.g. mongodb://user:pass@localhost:27017/db", Secret: true}},
 	},
 	{
-		Name: "redis", Title: "Redis", Category: "database",
+		Name: "redis", Title: "Redis", Category: "database", Publisher: "Redis",
 		Description: "Read and write Redis keys and data structures (needs uv)",
 		Docs:        "https://github.com/redis/mcp-redis",
 		Server:      Spec{Type: "stdio", Command: "uvx", Args: []string{"--from", "redis-mcp-server@latest", "redis-mcp-server", "--url", "{{REDIS_URL}}"}},
 		Vars:        []Var{{Name: "REDIS_URL", Prompt: "URL, e.g. redis://localhost:6379/0", Default: "redis://localhost:6379/0", Secret: true}},
 	},
 	{
-		Name: "sqlite", Title: "SQLite", Category: "database",
-		Description: "Query a local SQLite file (needs uv)",
-		Docs:        "https://pypi.org/project/mcp-server-sqlite/",
-		Server:      Spec{Type: "stdio", Command: "uvx", Args: []string{"mcp-server-sqlite", "--db-path", "{{DB_PATH}}"}},
-		Vars:        []Var{{Name: "DB_PATH", Prompt: "Path to the .db file"}},
+		Name: "dbhub", Title: "Any SQL database by DSN (DBHub)", Category: "database", Publisher: "Bytebase",
+		Description: "PostgreSQL, MySQL, MariaDB, SQL Server or SQLite from one DSN; URL-encode special characters in the password",
+		Docs:        "https://github.com/bytebase/dbhub",
+		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@bytebase/dbhub", "--transport", "stdio", "--dsn", "{{DSN}}"}},
+		Vars:        []Var{{Name: "DSN", Prompt: "DSN, e.g. postgres://user:pass@localhost:5432/db?sslmode=disable", Secret: true}},
 	},
 	// devops and work tracking
 	{
-		Name: "azure-devops", Title: "Azure DevOps", Category: "devops",
-		Description: "Work items, repos, pull requests, pipelines and wikis; signs in through your browser",
+		Name: "azure-devops", Title: "Azure DevOps", Category: "devops", Publisher: "Microsoft",
+		Description: "Work items, repos, pull requests, pipelines, wikis; Microsoft's hosted server, sign in with /mcp in Claude",
+		Docs:        "https://learn.microsoft.com/azure/devops/mcp-server/remote-mcp-server",
+		Server:      Spec{Type: "http", URL: "https://mcp.dev.azure.com/{{ADO_ORG}}"},
+		Vars:        []Var{{Name: "ADO_ORG", Prompt: "Organization, e.g. contoso for dev.azure.com/contoso"}},
+	},
+	{
+		Name: "azure-devops-local", Title: "Azure DevOps (local server)", Category: "devops", Publisher: "Microsoft",
+		Description: "The same, run on your machine; signs in through the browser. Linux/WSL needs libsecret (apt install libsecret-1-0)",
 		Docs:        "https://github.com/microsoft/azure-devops-mcp",
 		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@azure-devops/mcp", "{{ADO_ORG}}"}},
 		Vars:        []Var{{Name: "ADO_ORG", Prompt: "Organization, e.g. contoso for dev.azure.com/contoso"}},
 	},
 	{
-		Name: "azure", Title: "Azure", Category: "devops",
+		Name: "azure", Title: "Azure", Category: "devops", Publisher: "Microsoft",
 		Description: "Azure resources (Storage, Cosmos DB, Key Vault, Monitor…) through your Azure CLI login",
 		Docs:        "https://github.com/microsoft/mcp",
 		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@azure/mcp@latest", "server", "start"}},
 	},
 	{
-		Name: "github", Title: "GitHub", Category: "devops",
+		Name: "github", Title: "GitHub", Category: "devops", Publisher: "GitHub",
 		Description: "Repos, issues, pull requests and Actions, through GitHub's hosted server",
 		Docs:        "https://github.com/github/github-mcp-server",
 		Server: Spec{Type: "http", URL: "https://api.githubcopilot.com/mcp/",
@@ -121,58 +138,58 @@ var builtin = []Template{
 		Vars: []Var{{Name: "GITHUB_TOKEN", Prompt: "Personal access token (or ${GITHUB_TOKEN} to read it from the environment)", Secret: true}},
 	},
 	{
-		Name: "atlassian", Title: "Jira and Confluence", Category: "devops",
+		Name: "atlassian", Title: "Jira and Confluence", Category: "devops", Publisher: "Atlassian",
 		Description: "Atlassian's hosted server; sign in with /mcp in Claude",
-		Docs:        "https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/",
-		Server:      Spec{Type: "sse", URL: "https://mcp.atlassian.com/v1/sse"},
+		Docs:        "https://github.com/atlassian/atlassian-mcp-server",
+		Server:      Spec{Type: "http", URL: "https://mcp.atlassian.com/v2/mcp"},
 	},
 	{
-		Name: "linear", Title: "Linear", Category: "devops",
+		Name: "linear", Title: "Linear", Category: "devops", Publisher: "Linear",
 		Description: "Linear issues and projects; sign in with /mcp in Claude",
 		Docs:        "https://linear.app/docs/mcp",
-		Server:      Spec{Type: "sse", URL: "https://mcp.linear.app/sse"},
+		Server:      Spec{Type: "http", URL: "https://mcp.linear.app/mcp"},
 	},
 	{
-		Name: "sentry", Title: "Sentry", Category: "devops",
+		Name: "sentry", Title: "Sentry", Category: "devops", Publisher: "Sentry",
 		Description: "Errors and performance issues; sign in with /mcp in Claude",
-		Docs:        "https://docs.sentry.io/product/sentry-mcp/",
+		Docs:        "https://github.com/getsentry/sentry-mcp",
 		Server:      Spec{Type: "http", URL: "https://mcp.sentry.dev/mcp"},
 	},
 	// docs and knowledge
 	{
-		Name: "context7", Title: "Context7", Category: "docs",
+		Name: "context7", Title: "Context7", Category: "docs", Publisher: "Upstash",
 		Description: "Up-to-date library documentation for the code you write",
 		Docs:        "https://github.com/upstash/context7",
 		Server:      Spec{Type: "http", URL: "https://mcp.context7.com/mcp"},
 	},
 	{
-		Name: "notion", Title: "Notion", Category: "docs",
+		Name: "notion", Title: "Notion", Category: "docs", Publisher: "Notion",
 		Description: "Notion pages and databases; sign in with /mcp in Claude",
 		Docs:        "https://developers.notion.com/docs/mcp",
 		Server:      Spec{Type: "http", URL: "https://mcp.notion.com/mcp"},
 	},
 	// local tools
 	{
-		Name: "playwright", Title: "Playwright browser", Category: "tools",
+		Name: "playwright", Title: "Playwright browser", Category: "tools", Publisher: "Microsoft",
 		Description: "Drive a real browser: open pages, click, fill forms, take screenshots",
 		Docs:        "https://github.com/microsoft/playwright-mcp",
 		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@playwright/mcp@latest"}},
 	},
 	{
-		Name: "filesystem", Title: "Filesystem", Category: "tools",
+		Name: "filesystem", Title: "Filesystem", Category: "tools", Publisher: "MCP project",
 		Description: "Read and write files under one folder",
 		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
 		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "{{DIR}}"}},
 		Vars:        []Var{{Name: "DIR", Prompt: "Folder to allow"}},
 	},
 	{
-		Name: "fetch", Title: "Fetch", Category: "tools",
+		Name: "fetch", Title: "Fetch", Category: "tools", Publisher: "MCP project",
 		Description: "Fetch web pages as Markdown (needs uv)",
 		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
 		Server:      Spec{Type: "stdio", Command: "uvx", Args: []string{"mcp-server-fetch"}},
 	},
 	{
-		Name: "memory", Title: "Memory", Category: "tools",
+		Name: "memory", Title: "Memory", Category: "tools", Publisher: "MCP project",
 		Description: "A local knowledge graph Claude can keep notes in",
 		Docs:        "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
 		Server:      Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-memory"}},
