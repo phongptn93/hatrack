@@ -336,11 +336,11 @@ func (c *Config) saveServers(scope Scope, m map[string]json.RawMessage) error {
 	}
 	switch scope {
 	case User:
-		return editDoc(c.GlobalJSON, func(d doc) error { return d.set("mcpServers", m) })
+		return editDoc(c.GlobalJSON, c.backupDir(), func(d doc) error { return d.set("mcpServers", m) })
 	case Local:
 		return c.editProject(func(pd doc) error { return pd.set("mcpServers", m) })
 	case Project:
-		return editDoc(c.mcpJSON(), func(d doc) error { return d.set("mcpServers", m) })
+		return editDoc(c.mcpJSON(), "", func(d doc) error { return d.set("mcpServers", m) })
 	}
 	return fmt.Errorf("bad scope %q", scope)
 }
@@ -380,7 +380,7 @@ func (c *Config) projectDoc() (doc, error) {
 
 // editProject changes this folder's entry in projects and keeps every other key as it was.
 func (c *Config) editProject(fn func(pd doc) error) error {
-	return editDoc(c.GlobalJSON, func(d doc) error {
+	return editDoc(c.GlobalJSON, c.backupDir(), func(d doc) error {
 		var projects map[string]json.RawMessage
 		if err := d.get("projects", &projects); err != nil {
 			return err
@@ -492,16 +492,25 @@ func readDoc(path string) (doc, error) {
 	return d, readJSON(path, &d)
 }
 
-func editDoc(path string, fn func(doc) error) error {
-	d, err := readDoc(path)
-	if err != nil {
-		return err
-	}
-	if err := fn(d); err != nil {
-		return err
-	}
-	return writeJSON(path, d)
+// editDoc changes one JSON file. Claude may rewrite it meanwhile, so the edit is redone on the
+// newest content, and .claude.json is backed up first.
+func editDoc(path, backupDir string, fn func(doc) error) error {
+	return atomicfile.Edit(path, backupDir, 10, func(b []byte) ([]byte, error) {
+		d := doc{}
+		if len(strings.TrimSpace(string(b))) > 0 {
+			if err := json.Unmarshal(b, &d); err != nil {
+				return nil, fmt.Errorf("%s: %w", path, err)
+			}
+		}
+		if err := fn(d); err != nil {
+			return nil, err
+		}
+		return atomicfile.JSON(d)
+	})
 }
+
+// backupDir holds copies of .claude.json from before each change; ~/.hatrack/backups.
+func (c *Config) backupDir() string { return filepath.Join(filepath.Dir(c.Dir), "backups") }
 
 func (d doc) get(key string, v any) error {
 	raw, ok := d[key]

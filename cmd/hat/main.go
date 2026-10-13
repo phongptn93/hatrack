@@ -11,7 +11,7 @@ import (
 	"github.com/baodq97/hatrack/internal/claude"
 )
 
-const usage = `hat - switch Claude Code accounts and manage its MCP servers
+const helpText = `hat - switch Claude Code accounts and manage its MCP servers
 
   hat               list accounts (* = active)
   hat use <name>    switch to an account
@@ -19,6 +19,9 @@ const usage = `hat - switch Claude Code accounts and manage its MCP servers
   hat save [name]   keep the account Claude is signed in to now
   hat rm <name>     forget an account
   hat mcp …         manage MCP servers (databases, Azure DevOps…): hat mcp help
+  hat usage         tokens used by day, project, model, account; the 5-hour window
+  hat doctor        check Claude Code's setup: login, files, MCP servers
+  hat clean         forget deleted folders Claude still remembers (asks first)
   hat version       print the version
 
 Names default to the account's email.`
@@ -68,7 +71,11 @@ func run(args []string) error {
 			if p.Active {
 				mark = "*"
 			}
-			fmt.Printf("%s %-30s %s  %s\n", mark, p.Name, p.Email, p.Org)
+			plan := ""
+			if p.Plan != "" {
+				plan = "  [" + p.Plan + "]"
+			}
+			fmt.Printf("%s %-30s %s  %s%s\n", mark, p.Name, p.Email, p.Org, plan)
 		}
 		return nil
 	case cmd == "use" && arg != "":
@@ -95,14 +102,20 @@ func run(args []string) error {
 		}
 		fmt.Println("removed", arg)
 		return nil
+	case cmd == "usage":
+		return runUsage(s, args[1:])
+	case cmd == "doctor":
+		return doctor(s)
+	case cmd == "clean":
+		return clean(s, args[1:])
 	case cmd == "version" || cmd == "--version":
 		fmt.Println("hat", version)
 		return nil
 	case cmd == "-h" || cmd == "--help" || cmd == "help":
-		fmt.Println(usage)
+		fmt.Println(helpText)
 		return nil
 	}
-	return fmt.Errorf("unknown command\n\n%s", usage)
+	return fmt.Errorf("unknown command\n\n%s", helpText)
 }
 
 const addPrompt = `Add a Claude account

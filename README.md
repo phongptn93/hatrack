@@ -4,8 +4,9 @@
 [![release](https://img.shields.io/github/v/release/baodq97/hatrack)](https://github.com/baodq97/hatrack/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Switch the account Claude Code is signed in to, without signing out and back in, and manage the MCP
-servers it loads: databases, Azure DevOps, GitHub and more.
+A toolkit for Claude Code: switch the account it is signed in to without signing out, manage the MCP
+servers it loads (databases, Azure DevOps, GitHub and more), see the tokens you use per account, and
+keep its setup healthy.
 
 If you have more than one Claude subscription (personal and work, or two plans), hatrack keeps each
 login and swaps the one Claude uses with one click in the Windows tray, or one command on Linux/WSL.
@@ -16,6 +17,10 @@ It works for the `claude` CLI and the Claude Code extension for VS Code, since b
 - **MCP servers:** add them from a catalog (PostgreSQL, MySQL, SQL Server, MongoDB, Redis, Azure DevOps,
   GitHub, Jira…), switch them off without losing their settings, group them into sets that follow
   your account, and test that they start. See [MCP servers](#mcp-servers).
+- **Usage:** tokens by day, project, model and account, and the 5-hour window your limits count in.
+  See [Usage](#usage).
+- **Upkeep:** `hat doctor` checks the whole setup; `hat clean` forgets deleted folders Claude still
+  remembers. See [Doctor and clean](#doctor-and-clean).
 
 ```
 $ hat
@@ -33,6 +38,8 @@ now using work@company.com. If an open Claude session still shows the old accoun
 - [Windows tray app](#windows-tray-app)
 - [Adding an account](#adding-an-account)
 - [MCP servers](#mcp-servers)
+- [Usage](#usage)
+- [Doctor and clean](#doctor-and-clean)
 - [VS Code](#vs-code)
 - [WSL and Windows](#wsl-and-windows)
 - [How it works](#how-it-works)
@@ -98,12 +105,15 @@ Profile names default to the account's email. Pass a name to pick your own: `hat
 
 | Command | What it does |
 |---|---|
-| `hat` | List saved accounts. `*` marks the one Claude uses now. |
+| `hat` | List saved accounts and their plan. `*` marks the one Claude uses now. |
 | `hat use <name>` | Switch Claude to that account. |
 | `hat add [name]` | Sign in another account. Your current login is not touched. |
 | `hat save [name]` | Save the account Claude is signed in to now. |
 | `hat rm <name>` | Forget a saved account. Does not sign anything out. |
 | `hat mcp …` | Manage MCP servers. See [MCP servers](#mcp-servers). |
+| `hat usage` | Tokens used. See [Usage](#usage). |
+| `hat doctor` | Check Claude Code's setup. See [Doctor and clean](#doctor-and-clean). |
+| `hat clean` | Forget deleted folders Claude still remembers. |
 | `hat version` | Print the version. |
 
 ## Windows tray app
@@ -118,6 +128,8 @@ arrow at first; drag it onto the taskbar to keep it visible.
 Add account…
 Save current account
 Remove ▸
+─────────────
+Today: 15.5M tokens · window resets 21:00
 ─────────────
 MCP servers ▸
 ─────────────
@@ -312,6 +324,64 @@ which belongs to the team; it is switched off the way Claude itself does it, thr
 `disabledMcpjsonServers` in `~/.claude.json`. As with logins, only the keys being changed are touched,
 and every write goes through a temporary file.
 
+## Usage
+
+Claude Code records the tokens of every response in its transcripts. `hat usage` adds them up:
+
+```
+$ hat usage
+  DAY             RESPONSES  INPUT  OUTPUT  CACHE WRITE  CACHE READ   TOTAL
+  2026-10-12 Mon        212    904  310.2K       1.02M      38.11M  39.44M
+  2026-10-13 Tue         84    168  139.5K      216.2K      15.18M  15.53M
+  TOTAL                 296   1072  449.7K       1.24M      53.29M  54.97M
+
+5-hour window 16:00–21:00 (ends in 3h15m) for work@company.com: 15.53M tokens, 139.5K output, 84 responses
+```
+
+- `--days 30` looks further back; `--by project|model|account|session` groups differently.
+- **By account:** hat records when each account becomes active (`hat use`, `hat save`, the tray) in
+  `~/.hatrack/switches.jsonl`, and counts each response for the account in use at the time. Usage from
+  before hat recorded anything shows as `(before hat)`.
+- **5-hour window:** subscription limits are counted in 5-hour windows. hat shows the open window of
+  each account and when it ends, estimated from your responses the way the limits reset.
+- It reads only this machine's transcripts, so work on other machines is not counted, and Claude
+  deletes transcripts after `cleanupPeriodDays` (30 by default). The limits themselves weigh tokens in
+  ways Anthropic does not publish, so hat shows tokens, not a percentage of your limit.
+
+The tray menu shows today's tokens and when the current window resets.
+
+## Doctor and clean
+
+`hat doctor` checks everything hat knows about, and changes nothing:
+
+```
+$ hat doctor
+✓ Claude Code 2.1.296 (Claude Code)
+✓ signed in as work@company.com (saved as work@company.com, max)
+✓ 2 saved accounts
+✓ ~/.claude.json: 1.2 MB, 48 folders remembered
+✓ ~/.claude/settings.json is valid; Claude keeps transcripts 30 days
+✓ transcripts: 412.0 MB in ~/.claude/projects
+! 9 deleted folders still remembered: `hat clean` shows them
+✓ MCP: 4 servers on, 2 off, no problems found
+```
+
+It flags a login hat has not saved, login files other users can read, a broken `settings.json` (which
+Claude then ignores silently), a `~/.claude.json` large enough to slow Claude down, and MCP servers
+that cannot start.
+
+Claude remembers every folder it ran in, with its trust settings, history and local MCP servers, in
+`~/.claude.json`, and never forgets them. `hat clean` lists the ones that were deleted:
+
+```sh
+hat clean                          # show them; changes nothing
+hat clean --apply                  # forget them in ~/.claude.json
+hat clean --apply --transcripts    # and delete their transcripts too
+```
+
+A folder counts as deleted only when its parent folder still exists, so a project on an unplugged
+drive or a disconnected share is left alone.
+
 ## VS Code
 
 The Claude Code extension and the CLI share one login, so `hat use` switches both. A conversation
@@ -350,6 +420,9 @@ back as it was.
   copy can stay current.
 - Every write goes to a temporary file first and is renamed into place, so a crash never leaves half a
   login file.
+- Claude rewrites `~/.claude.json` while it runs. If it changes while hat is editing it, hat redoes its
+  edit on the new content instead of overwriting Claude's. Before each change, hat keeps a copy of the
+  file in `~/.hatrack/backups` (the last 10).
 
 ## Security and privacy
 
@@ -363,8 +436,9 @@ back as it was.
 - Saved logins are plain files, like Claude's own `.credentials.json`, readable only by your user
   (mode `0600` on Linux; your user profile's permissions on Windows). Anyone who can read your home
   folder can read them, just as with Claude's own login.
-- hatrack only reads and writes Claude's login files and `~/.hatrack`. It does not touch Claude's
-  traffic, telemetry or anything else.
+- hatrack reads and writes Claude's login files, its MCP server settings and `~/.hatrack`. `hat usage`
+  only reads the token counts in Claude's transcripts, not what you wrote; `hat clean` changes only
+  what it listed, and only with `--apply`. It does not touch Claude's traffic, telemetry or anything else.
 - No telemetry, no accounts, no server.
 
 Anthropic's terms do not allow sharing one subscription between people. hatrack is for switching
@@ -405,7 +479,7 @@ account was active.
 
 ```powershell
 Remove-Item "$([Environment]::GetFolderPath('Startup'))\hatrack.lnk", "$env:LOCALAPPDATA\hatrack" -Recurse
-Remove-Item "$HOME\.hatrack" -Recurse   # your saved logins, switched-off MCP servers and sets
+Remove-Item "$HOME\.hatrack" -Recurse   # saved logins, switched-off MCP servers, sets, switch history, backups
 ```
 
 and remove `%LOCALAPPDATA%\hatrack` from your user `PATH` (Settings → System → About → Advanced system
@@ -415,7 +489,7 @@ settings → Environment Variables).
 
 ```sh
 rm ~/.local/bin/hat
-rm -r ~/.hatrack   # your saved logins, switched-off MCP servers and sets
+rm -r ~/.hatrack   # saved logins, switched-off MCP servers, sets, switch history, backups
 ```
 
 ## Build from source
@@ -433,7 +507,8 @@ Layout:
 ```
 cmd/hat/              CLI
 cmd/hatrack-tray/     Windows tray app
-internal/claude/      reading, saving and swapping Claude logins
+internal/claude/      Claude logins: save, swap, switch history, forgetting deleted folders
+internal/usage/       token usage from Claude's transcripts
 internal/mcp/         MCP servers: scopes, on/off, catalog, sets, test
 internal/atomicfile/  crash-safe file writes
 ```

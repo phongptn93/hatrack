@@ -19,6 +19,7 @@ import (
 	"fyne.io/systray"
 	"github.com/baodq97/hatrack/internal/claude"
 	"github.com/baodq97/hatrack/internal/mcp"
+	"github.com/baodq97/hatrack/internal/usage"
 	"golang.org/x/sys/windows"
 )
 
@@ -51,12 +52,15 @@ func onReady() {
 }
 
 type tray struct {
-	mu   sync.Mutex
-	s    *claude.Store
-	m    *mcp.Config
-	err  error // last failed action, shown at the top of the menu
-	last string
-	done chan struct{}
+	mu sync.Mutex
+	s  *claude.Store
+	m  *mcp.Config
+
+	usage   string // today's usage line, refreshed once a minute
+	usageAt time.Time
+	err     error // last failed action, shown at the top of the menu
+	last    string
+	done    chan struct{}
 }
 
 // render rebuilds the menu only when something changed, so an open menu is not torn down every tick.
@@ -79,7 +83,10 @@ func (t *tray) render() {
 			sets, err = t.m.Sets()
 		}
 	}
-	key := fmt.Sprint(ps, err, servers, sets)
+	if time.Since(t.usageAt) > time.Minute && t.s != nil {
+		t.usage, t.usageAt = usageLine(t.s), time.Now()
+	}
+	key := fmt.Sprint(ps, err, servers, sets, t.usage)
 	if key == t.last {
 		return
 	}
@@ -105,6 +112,10 @@ func (t *tray) render() {
 		t.on(systray.AddMenuItemCheckbox(label(p), p.Email, p.Active), func() error { return t.use(p.Name) })
 	}
 	systray.SetTooltip(tip)
+	if t.usage != "" {
+		systray.AddSeparator()
+		systray.AddMenuItem(t.usage, "From Claude Code's transcripts on this PC; `hat usage` has more").Disable()
+	}
 	systray.AddSeparator()
 	t.on(systray.AddMenuItem("Add account…", "Sign in another account in a console window"), t.openAdd)
 	t.on(systray.AddMenuItem("Save current account", "Keep the account Claude is signed in to now"), func() error {
@@ -126,6 +137,43 @@ func (t *tray) render() {
 			systray.Quit()
 		}
 	}()
+}
+
+// usageLine sums today's tokens and the open 5-hour window of the account in use.
+func usageLine(s *claude.Store) string {
+	now := time.Now()
+	y, mo, d := now.Date()
+	today := time.Date(y, mo, d, 0, 0, 0, 0, time.Local)
+	es, err := usage.Scan(filepath.Join(s.ConfigDir, "projects"), today.Add(-usage.BlockLen))
+	if err != nil || len(es) == 0 {
+		return ""
+	}
+	hist, _ := s.Switches()
+	cur := claude.AccountAt(hist, now)
+	var day, mine []usage.Entry
+	for _, e := range es {
+		if !e.Time.Before(today) {
+			day = append(day, e)
+		}
+		if claude.AccountAt(hist, e.Time) == cur {
+			mine = append(mine, e)
+		}
+	}
+	line := "Today: " + tokens(usage.Sum(day).Total()) + " tokens"
+	if bs := usage.Blocks(mine); len(bs) > 0 && bs[len(bs)-1].Active(now) {
+		line += " · window resets " + bs[len(bs)-1].End.Local().Format("15:04")
+	}
+	return line
+}
+
+func tokens(v int64) string {
+	switch {
+	case v >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(v)/1e6)
+	case v >= 1_000:
+		return fmt.Sprintf("%.0fK", float64(v)/1e3)
+	}
+	return fmt.Sprint(v)
 }
 
 // use switches account, then to the MCP set linked to it, if any.
