@@ -210,7 +210,7 @@ same name.
 
 | Category | Templates |
 |---|---|
-| database | `postgres`, `mysql`, `sqlserver` (DBHub: SQL Server, PostgreSQL, MySQL, MariaDB, SQLite), `mongodb`, `redis`, `sqlite` |
+| database | `postgres`, `mysql`, `mssql` (SQL Server, Azure SQL), `sqlserver` (DBHub: SQL Server, PostgreSQL, MySQL, MariaDB, SQLite), `mongodb`, `redis`, `sqlite` |
 | devops | `azure-devops`, `azure`, `github`, `atlassian` (Jira, Confluence), `linear`, `sentry` |
 | docs | `context7`, `notion` |
 | tools | `playwright`, `filesystem`, `fetch`, `memory` |
@@ -227,7 +227,9 @@ PostgreSQL needs a few values (or pass them with --var NAME=value):
 added local-scope MCP server prod-db: uvx postgres-mcp --access-mode=restricted
 ```
 
-Database templates are read-only where the server supports it. Each server is published by its own
+Database templates are read-only where the server supports it. `mssql` is not: it can run any SQL,
+so give it a login that can only read (`db_datareader`). It signs in with a SQL login only, not
+Windows authentication. Each server is published by its own
 maintainer (see the link `add` prints) and runs with your permissions; hatrack only writes the config
 Claude starts it with. Servers started with `npx` need [Node.js](https://nodejs.org), those with `uvx`
 need [uv](https://docs.astral.sh/uv/). On Windows, `npx` is started through `cmd /c`, as Claude needs.

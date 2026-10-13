@@ -54,6 +54,22 @@ var builtin = []Template{
 		},
 	},
 	{
+		Name: "mssql", Title: "SQL Server", Category: "database",
+		Description: "Query SQL Server or Azure SQL with a SQL login; use a read-only login, it can run any SQL",
+		Docs:        "https://github.com/BYMCS/mssql-mcp",
+		Server: Spec{Type: "stdio", Command: "npx", Args: []string{"-y", "mssql-mcp@latest"},
+			Env: map[string]string{"DB_SERVER": "{{DB_SERVER}}", "DB_PORT": "{{DB_PORT}}", "DB_DATABASE": "{{DB_DATABASE}}",
+				"DB_USER": "{{DB_USER}}", "DB_PASSWORD": "{{DB_PASSWORD}}", "DB_TRUST_SERVER_CERTIFICATE": "{{DB_TRUST_SERVER_CERTIFICATE}}"}},
+		Vars: []Var{
+			{Name: "DB_SERVER", Prompt: "Server, e.g. localhost or myserver.database.windows.net"},
+			{Name: "DB_PORT", Prompt: "Port", Default: "1433"},
+			{Name: "DB_DATABASE", Prompt: "Database"},
+			{Name: "DB_USER", Prompt: "SQL login"},
+			{Name: "DB_PASSWORD", Prompt: "Password", Secret: true},
+			{Name: "DB_TRUST_SERVER_CERTIFICATE", Prompt: "Trust a self-signed server certificate? true/false", Default: "false"},
+		},
+	},
+	{
 		Name: "sqlserver", Title: "SQL Server and other SQL databases (DBHub)", Category: "database",
 		Description: "One server for SQL Server, PostgreSQL, MySQL, MariaDB and SQLite, picked by the DSN",
 		Docs:        "https://github.com/bytebase/dbhub",

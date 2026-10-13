@@ -62,6 +62,8 @@ func redactMap(m map[string]string) map[string]string {
 		switch {
 		case rest == "": // empty, or only ${VAR} references: nothing secret to hide
 			out[k] = v
+		case !secretKey.MatchString(k):
+			out[k] = redactURL(v) // a host, port or flag: worth seeing, bar a password in a URL
 		case strings.HasPrefix(v, "Bearer "):
 			out[k] = "Bearer " + hidden
 		default:
@@ -70,6 +72,9 @@ func redactMap(m map[string]string) map[string]string {
 	}
 	return out
 }
+
+// secretKey matches env and header names whose values are secrets, or may hold one.
+var secretKey = regexp.MustCompile(`(?i)pass|pwd|secret|token|key|auth|cred|cookie|session|dsn|uri|url|conn`)
 
 var userinfo = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*://[^:/@\s]*):([^/\s]+)@`) // the password runs to the last @
 

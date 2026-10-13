@@ -189,12 +189,15 @@ func TestCatalogRender(t *testing.T) {
 func TestRedactAndExpand(t *testing.T) {
 	sp := Spec{
 		Args:    []string{"--dsn", "sqlserver://sa:P@ss@host:1433/db", "postgres://u:${PGPASS}@h/db"},
-		Env:     map[string]string{"TOKEN": "abc123", "REF": "${MY_TOKEN}", "EMPTY": ""},
+		Env:     map[string]string{"TOKEN": "abc123", "REF": "${MY_TOKEN}", "EMPTY": "", "DB_SERVER": "db1", "DB_PASSWORD": "pw", "LOG": "x://u:pw@h"},
 		Headers: map[string]string{"Authorization": "Bearer ghp_xyz", "X-Ref": "Bearer ${GH}"},
 	}
 	r := sp.Redacted()
 	if r.Args[1] != "sqlserver://sa:****@host:1433/db" || r.Args[2] != "postgres://u:${PGPASS}@h/db" {
 		t.Fatalf("args: %q", r.Args)
+	}
+	if r.Env["DB_SERVER"] != "db1" || r.Env["DB_PASSWORD"] != "****" || r.Env["LOG"] != "x://u:****@h" {
+		t.Fatalf("env: %v", r.Env)
 	}
 	if r.Env["TOKEN"] != "****" || r.Env["REF"] != "${MY_TOKEN}" || r.Headers["Authorization"] != "Bearer ****" || r.Headers["X-Ref"] != "Bearer ${GH}" {
 		t.Fatalf("env %v headers %v", r.Env, r.Headers)
