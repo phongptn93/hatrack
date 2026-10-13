@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/baodq97/hatrack/internal/claude"
 )
 
 func msg(ts, id, req, model string, in, out int) string {
@@ -61,5 +63,26 @@ func TestBlocks(t *testing.T) {
 	}
 	if !bs[2].Active(at("2026-10-02T01:00:00Z").Time) || bs[2].Active(at("2026-10-02T04:00:00Z").Time) {
 		t.Fatal("active window")
+	}
+}
+
+func TestToday(t *testing.T) {
+	root := t.TempDir()
+	s := &claude.Store{ConfigDir: filepath.Join(root, ".claude"), GlobalJSON: filepath.Join(root, ".claude.json"), Dir: filepath.Join(root, ".hatrack", "claude")}
+	now := time.Date(2026, 10, 13, 18, 30, 0, 0, time.UTC)
+	ts := func(d time.Duration) string { return now.Add(-d).Format(time.RFC3339) }
+	p := filepath.Join(s.ConfigDir, "projects", "-w", "s.jsonl")
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	os.WriteFile(p, []byte(strings.Join([]string{
+		msg(ts(30*time.Hour), "m0", "r0", "m", 1000, 1000), // yesterday: not counted
+		msg(ts(2*time.Hour), "m1", "r1", "m", 1_000_000, 500_000),
+		msg(ts(time.Hour), "m2", "r2", "m", 0, 89),
+	}, "\n")), 0o600)
+	// 1,500,000 + 89 + 2×(10+100) = 1,500,309; the window opened at 16:00
+	if got := Today(s, now); got != "Today: 1.5M tokens · window resets 21:00" {
+		t.Fatalf("got %q", got)
+	}
+	if got := Today(s, now.Add(48*time.Hour)); got != "" {
+		t.Fatalf("a day without usage: %q", got)
 	}
 }

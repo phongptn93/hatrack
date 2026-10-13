@@ -183,6 +183,9 @@ Hatrack.app puts a hat in the menu bar, with no Dock icon:
 - **Add Account…** opens Terminal and runs `hat add` there, so you can pick the browser to sign in
   with and paste the code if asked. The new account shows up in the menu when sign-in finishes.
 - **Save Current Account** keeps the login Claude has now.
+- **Today: … tokens** shows today's usage and when the current 5-hour window resets (see [Usage](#usage)).
+- **MCP servers** lists your user-scope MCP servers: click one to switch it on or off, or pick a
+  [set](#sets-mcp-servers-that-follow-your-account). A set linked to an account follows it here too.
 
 The dashboard is served only on `127.0.0.1`. Each launch makes a random token that only the window
 Hatrack opens receives, and every action must carry it, so other web pages cannot switch or remove
@@ -520,8 +523,8 @@ between accounts that are yours. Found a security problem? See [SECURITY.md](SEC
 
 - **Claude Code only** for now. Codex and other tools may come later. `hat mcp import --desktop` reads
   Claude Desktop's servers but does not change them.
-- The Windows tray shows user-scope MCP servers only; manage local and project ones with `hat mcp` in
-  the folder. On macOS, MCP servers, usage, doctor and clean are in the `hat` CLI.
+- The Windows tray and the macOS menu bar show user-scope MCP servers only; manage local and project ones with `hat mcp` in
+  the folder. The same goes for the macOS menu bar.
 - `hat mcp test` speaks stdio and streamable HTTP; servers on the older `sse` transport show their state in Claude's `/mcp`.
 - **macOS app is not notarized**, so Gatekeeper asks before the first launch.
 - **Open sessions** may keep using the previous account until restarted.

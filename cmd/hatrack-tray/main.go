@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -19,6 +18,7 @@ import (
 	"fyne.io/systray"
 	"github.com/baodq97/hatrack/internal/claude"
 	"github.com/baodq97/hatrack/internal/mcp"
+	"github.com/baodq97/hatrack/internal/traymenu"
 	"github.com/baodq97/hatrack/internal/usage"
 	"golang.org/x/sys/windows"
 )
@@ -56,11 +56,10 @@ type tray struct {
 	s  *claude.Store
 	m  *mcp.Config
 
-	usage   string // today's usage line, refreshed once a minute
-	usageAt time.Time
-	err     error // last failed action, shown at the top of the menu
-	last    string
-	done    chan struct{}
+	usage usage.TodayCache
+	err   error // last failed action, shown at the top of the menu
+	last  string
+	done  chan struct{}
 }
 
 // render rebuilds the menu only when something changed, so an open menu is not torn down every tick.
@@ -75,18 +74,12 @@ func (t *tray) render() {
 			err = lerr
 		}
 	}
-	var servers []mcp.Server
-	var sets []mcp.Set
-	if t.m != nil && err == nil {
-		servers, err = t.m.List()
-		if err == nil {
-			sets, err = t.m.Sets()
-		}
+	var mst traymenu.MCPState
+	if err == nil {
+		mst, err = traymenu.LoadMCP(t.m)
 	}
-	if time.Since(t.usageAt) > time.Minute && t.s != nil {
-		t.usage, t.usageAt = usageLine(t.s), time.Now()
-	}
-	key := fmt.Sprint(ps, err, servers, sets, t.usage)
+	today := t.usage.Line(t.s)
+	key := fmt.Sprint(ps, err, mst, today)
 	if key == t.last {
 		return
 	}
@@ -112,9 +105,9 @@ func (t *tray) render() {
 		t.on(systray.AddMenuItemCheckbox(label(p), p.Email, p.Active), func() error { return t.use(p.Name) })
 	}
 	systray.SetTooltip(tip)
-	if t.usage != "" {
+	if today != "" {
 		systray.AddSeparator()
-		systray.AddMenuItem(t.usage, "From Claude Code's transcripts on this PC; `hat usage` has more").Disable()
+		traymenu.AddUsage(today)
 	}
 	systray.AddSeparator()
 	t.on(systray.AddMenuItem("Add account…", "Sign in another account in a console window"), t.openAdd)
@@ -129,7 +122,7 @@ func (t *tray) render() {
 		}
 	}
 	systray.AddSeparator()
-	t.mcpMenu(servers, sets)
+	traymenu.AddMCP(t.m, mst, t.on)
 	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "")
 	go func() {
@@ -139,81 +132,10 @@ func (t *tray) render() {
 	}()
 }
 
-// usageLine sums today's tokens and the open 5-hour window of the account in use.
-func usageLine(s *claude.Store) string {
-	now := time.Now()
-	y, mo, d := now.Date()
-	today := time.Date(y, mo, d, 0, 0, 0, 0, time.Local)
-	es, err := usage.Scan(filepath.Join(s.ConfigDir, "projects"), today.Add(-usage.BlockLen))
-	if err != nil || len(es) == 0 {
-		return ""
-	}
-	hist, _ := s.Switches()
-	cur := claude.AccountAt(hist, now)
-	var day, mine []usage.Entry
-	for _, e := range es {
-		if !e.Time.Before(today) {
-			day = append(day, e)
-		}
-		if claude.AccountAt(hist, e.Time) == cur {
-			mine = append(mine, e)
-		}
-	}
-	line := "Today: " + tokens(usage.Sum(day).Total()) + " tokens"
-	if bs := usage.Blocks(mine); len(bs) > 0 && bs[len(bs)-1].Active(now) {
-		line += " · window resets " + bs[len(bs)-1].End.Local().Format("15:04")
-	}
-	return line
-}
-
-func tokens(v int64) string {
-	switch {
-	case v >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(v)/1e6)
-	case v >= 1_000:
-		return fmt.Sprintf("%.0fK", float64(v)/1e3)
-	}
-	return fmt.Sprint(v)
-}
-
 // use switches account, then to the MCP set linked to it, if any.
 func (t *tray) use(name string) error {
 	_, _, err := mcp.SwitchAccount(t.s, name)
 	return err
-}
-
-// mcpMenu lists user-scope MCP servers to switch on and off, and the sets to switch to.
-func (t *tray) mcpMenu(servers []mcp.Server, sets []mcp.Set) {
-	menu := systray.AddMenuItem("MCP servers", "Switch Claude's user-scope MCP servers on and off")
-	if len(servers) == 0 {
-		menu.AddSubMenuItem("None yet: see `hat mcp catalog`", "").Disable()
-	}
-	for _, s := range servers {
-		if s.Scope != mcp.User {
-			continue
-		}
-		item := menu.AddSubMenuItemCheckbox(s.Name, s.Spec.Redacted().Target(), s.Enabled)
-		t.on(item, func() error {
-			if s.Enabled {
-				return t.m.Disable(s.Name, mcp.User)
-			}
-			return t.m.Enable(s.Name, mcp.User)
-		})
-	}
-	if len(sets) == 0 {
-		return
-	}
-	menu.AddSeparator()
-	for _, set := range sets {
-		tip := strings.Join(set.Servers, ", ")
-		if set.Account != "" {
-			tip += " (with " + set.Account + ")"
-		}
-		t.on(menu.AddSubMenuItem("Set: "+set.Name, tip), func() error {
-			_, err := t.m.UseSet(set.Name)
-			return err
-		})
-	}
 }
 
 // on runs fn for each click until the menu is rebuilt, then shows its error, if any.

@@ -13,6 +13,8 @@ import (
 	"fyne.io/systray"
 	"github.com/baodq97/hatrack/internal/claude"
 	"github.com/baodq97/hatrack/internal/mcp"
+	"github.com/baodq97/hatrack/internal/traymenu"
+	"github.com/baodq97/hatrack/internal/usage"
 )
 
 //go:embed icon.ico
@@ -21,6 +23,8 @@ var icon []byte
 type Tray struct {
 	mu           sync.Mutex
 	s            *claude.Store
+	m            *mcp.Config // user-scope MCP servers; nil if their config could not be found
+	usage        usage.TodayCache
 	err          error
 	last         string
 	done         chan struct{}
@@ -35,7 +39,8 @@ func Start(s *claude.Store, onOpenWindow func(), onAdd func() error) {
 		systray.SetTitle("")
 		systray.SetTooltip("Hatrack - Claude Account Switcher")
 
-		t := &Tray{s: s, onOpenWindow: onOpenWindow, onAdd: onAdd}
+		m, merr := mcp.Default("") // a menu has no folder: user-scope servers only
+		t := &Tray{s: s, m: m, err: merr, onOpenWindow: onOpenWindow, onAdd: onAdd}
 		t.render()
 
 		go func() {
@@ -59,7 +64,12 @@ func (t *Tray) render() {
 		}
 	}
 
-	key := fmt.Sprint(ps, err)
+	var mst traymenu.MCPState
+	if err == nil {
+		mst, err = traymenu.LoadMCP(t.m)
+	}
+	today := t.usage.Line(t.s)
+	key := fmt.Sprint(ps, err, mst, today)
 	if key == t.last {
 		return
 	}
@@ -96,6 +106,10 @@ func (t *Tray) render() {
 	}
 
 	systray.SetTooltip(tip)
+	if today != "" {
+		systray.AddSeparator()
+		traymenu.AddUsage(today)
+	}
 	systray.AddSeparator()
 
 	if t.onOpenWindow != nil {
@@ -125,6 +139,9 @@ func (t *Tray) render() {
 			})
 		}
 	}
+
+	systray.AddSeparator()
+	traymenu.AddMCP(t.m, mst, t.on)
 
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit Hatrack", "Exit application")
