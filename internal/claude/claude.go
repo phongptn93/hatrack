@@ -4,7 +4,6 @@
 package claude
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/baodq97/hatrack/internal/atomicfile"
 )
 
 const (
@@ -296,36 +297,11 @@ func setAccount(path string, raw json.RawMessage) error {
 		}
 	}
 	m[accountKey] = raw
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(m); err != nil {
-		return err
-	}
-	return writeAtomic(path, buf.Bytes())
-}
-
-// writeAtomic replaces path in one rename so a crash never leaves half a login file.
-func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
+	b, err = atomicfile.JSON(m)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Chmod(0o600); err != nil && !errors.Is(err, errors.ErrUnsupported) {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+	return writeAtomic(path, b)
 }
+
+var writeAtomic = atomicfile.Write

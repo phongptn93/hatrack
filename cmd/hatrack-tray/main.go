@@ -5,17 +5,20 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
 	"fyne.io/systray"
 	"github.com/baodq97/hatrack/internal/claude"
+	"github.com/baodq97/hatrack/internal/mcp"
 	"golang.org/x/sys/windows"
 )
 
@@ -37,7 +40,8 @@ func main() {
 func onReady() {
 	systray.SetIcon(icon)
 	s, err := claude.Default()
-	t := &tray{s: s, err: err}
+	m, merr := mcp.Default("") // the tray has no folder: user-scope servers only
+	t := &tray{s: s, m: m, err: errors.Join(err, merr)}
 	t.render()
 	go func() { // pick up changes made by `hat` or by signing in from Claude itself
 		for range time.Tick(3 * time.Second) {
@@ -49,6 +53,7 @@ func onReady() {
 type tray struct {
 	mu   sync.Mutex
 	s    *claude.Store
+	m    *mcp.Config
 	err  error // last failed action, shown at the top of the menu
 	last string
 	done chan struct{}
@@ -66,7 +71,15 @@ func (t *tray) render() {
 			err = lerr
 		}
 	}
-	key := fmt.Sprint(ps, err)
+	var servers []mcp.Server
+	var sets []mcp.Set
+	if t.m != nil && err == nil {
+		servers, err = t.m.List()
+		if err == nil {
+			sets, err = t.m.Sets()
+		}
+	}
+	key := fmt.Sprint(ps, err, servers, sets)
 	if key == t.last {
 		return
 	}
@@ -89,7 +102,7 @@ func (t *tray) render() {
 		if p.Active {
 			tip = "hatrack: " + p.Name
 		}
-		t.on(systray.AddMenuItemCheckbox(label(p), p.Email, p.Active), func() error { return t.s.Use(p.Name) })
+		t.on(systray.AddMenuItemCheckbox(label(p), p.Email, p.Active), func() error { return t.use(p.Name) })
 	}
 	systray.SetTooltip(tip)
 	systray.AddSeparator()
@@ -105,12 +118,61 @@ func (t *tray) render() {
 		}
 	}
 	systray.AddSeparator()
+	t.mcpMenu(servers, sets)
+	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "")
 	go func() {
 		if _, ok := <-quit.ClickedCh; ok { // ResetMenu closes the channel; that is not a click
 			systray.Quit()
 		}
 	}()
+}
+
+// use switches account, then to the MCP set linked to it, if any.
+func (t *tray) use(name string) error {
+	if err := t.s.Use(name); err != nil || t.m == nil {
+		return err
+	}
+	set, ok, err := t.m.SetFor(name)
+	if err != nil || !ok {
+		return err
+	}
+	_, err = t.m.UseSet(set.Name)
+	return err
+}
+
+// mcpMenu lists user-scope MCP servers to switch on and off, and the sets to switch to.
+func (t *tray) mcpMenu(servers []mcp.Server, sets []mcp.Set) {
+	menu := systray.AddMenuItem("MCP servers", "Switch Claude's user-scope MCP servers on and off")
+	if len(servers) == 0 {
+		menu.AddSubMenuItem("None yet: see `hat mcp catalog`", "").Disable()
+	}
+	for _, s := range servers {
+		if s.Scope != mcp.User {
+			continue
+		}
+		item := menu.AddSubMenuItemCheckbox(s.Name, s.Spec.Redacted().Target(), s.Enabled)
+		t.on(item, func() error {
+			if s.Enabled {
+				return t.m.Disable(s.Name, mcp.User)
+			}
+			return t.m.Enable(s.Name, mcp.User)
+		})
+	}
+	if len(sets) == 0 {
+		return
+	}
+	menu.AddSeparator()
+	for _, set := range sets {
+		tip := strings.Join(set.Servers, ", ")
+		if set.Account != "" {
+			tip += " (with " + set.Account + ")"
+		}
+		t.on(menu.AddSubMenuItem("Set: "+set.Name, tip), func() error {
+			_, err := t.m.UseSet(set.Name)
+			return err
+		})
+	}
 }
 
 // on runs fn for each click until the menu is rebuilt, then shows its error, if any.

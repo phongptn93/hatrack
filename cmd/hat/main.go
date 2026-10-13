@@ -1,4 +1,5 @@
-// Command hat switches the account Claude Code is signed in to, without signing out.
+// Command hat switches the account Claude Code is signed in to, without signing out, and
+// manages the MCP servers Claude Code loads.
 package main
 
 import (
@@ -10,13 +11,14 @@ import (
 	"github.com/baodq97/hatrack/internal/claude"
 )
 
-const usage = `hat - switch Claude Code accounts without signing out
+const usage = `hat - switch Claude Code accounts and manage its MCP servers
 
   hat               list accounts (* = active)
   hat use <name>    switch to an account
   hat add [name]    sign in another account; the active one is untouched
   hat save [name]   keep the account Claude is signed in to now
   hat rm <name>     forget an account
+  hat mcp …         manage MCP servers (databases, Azure DevOps…): hat mcp help
   hat version       print the version
 
 Names default to the account's email.`
@@ -38,6 +40,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "mcp" {
+		return runMCP(args[1:])
+	}
 	s, err := claude.Default()
 	if err != nil {
 		return err
@@ -71,6 +76,9 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Printf("now using %s. If an open Claude session still shows the old account, restart it (VS Code: Reload Window).\n", arg)
+		if err := useLinkedSet(arg); err != nil {
+			return fmt.Errorf("switched account, but its MCP set: %w", err)
+		}
 		return nil
 	case cmd == "add":
 		return add(s, arg)
