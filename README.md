@@ -9,25 +9,27 @@ servers it loads (databases, Azure DevOps, GitHub and more), see the tokens you 
 keep its setup healthy.
 
 If you have more than one Claude subscription (personal and work, or two plans), hatrack keeps each
-login and swaps the one Claude uses with one click in the Windows tray, or one command on macOS,
-Linux and WSL.
-It works for the `claude` CLI and the Claude Code extension for VS Code, since both read the same login.
+login and swaps the one Claude uses with one click in the Windows tray or the macOS menu bar, or one
+command anywhere. It works for the `claude` CLI and the Claude Code extension for VS Code, since both
+read the same login.
 
-- **Windows:** a tray app (click the hat, pick an account, switch MCP servers on and off) plus the `hat` CLI.
-- **macOS:** a menu bar app with a dashboard window, plus the `hat` CLI.
+- **Windows:** a tray app (click the hat, pick an account, switch MCP servers on and off, see your
+  limits) plus the `hat` CLI.
+- **macOS:** a menu bar app, the same as the tray plus a dashboard window, and the `hat` CLI.
 - **Linux and WSL:** the `hat` CLI.
 - **MCP servers:** add them from a catalog (PostgreSQL, MySQL, SQL Server, MongoDB, Redis, Azure DevOps,
   GitHub, Jira…), switch them off without losing their settings, group them into sets that follow
   your account, and test that they start. See [MCP servers](#mcp-servers).
-- **Usage:** tokens by day, project, model and account, and the 5-hour window your limits count in.
-  See [Usage](#usage).
+- **Usage and limits:** tokens by day, project, model and account; how much of your 5-hour and weekly
+  limits is used, in Claude's status line, with a warning before you reach them. See [Usage](#usage)
+  and [Limits and warnings](#limits-and-warnings).
 - **Upkeep:** `hat doctor` checks the whole setup; `hat clean` forgets deleted folders Claude still
   remembers. See [Doctor and clean](#doctor-and-clean).
 
 ```
 $ hat
-* personal@gmail.com             personal@gmail.com  personal@gmail.com's Organization
-  work@company.com               work@company.com    Company
+* personal@gmail.com             personal@gmail.com  personal@gmail.com's Organization  [pro]
+  work@company.com               work@company.com    Company  [max]
 $ hat use work@company.com
 now using work@company.com. If an open Claude session still shows the old account, restart it (VS Code: Reload Window).
 ```
@@ -49,7 +51,7 @@ now using work@company.com. If an open Claude session still shows the old accoun
 - [macOS](#macos)
 - [How it works](#how-it-works)
 - [Security and privacy](#security-and-privacy)
-- [Limits](#limits)
+- [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Uninstall](#uninstall)
 - [Build from source](#build-from-source)
@@ -124,6 +126,8 @@ from the new release.
 2. Keep that login: `hat save` (tray: **Save current account**).
 3. Add each other account: `hat add` (tray: **Add account…**). See [Adding an account](#adding-an-account).
 4. Switch: `hat use <name>` (tray: click the account).
+5. Optional: `hat statusline install` to see your limits in Claude Code and be warned before you
+   reach them, and `hat mcp catalog` to add MCP servers.
 
 Profile names default to the account's email. Pass a name to pick your own: `hat save personal`.
 
@@ -138,11 +142,11 @@ Profile names default to the account's email. Pass a name to pick your own: `hat
 | `hat rm <name>` | Forget a saved account. Does not sign anything out. |
 | `hat mcp …` | Manage MCP servers. See [MCP servers](#mcp-servers). |
 | `hat usage` | Tokens used. See [Usage](#usage). |
-| `hat statusline install` | Show your limits in Claude Code and warn before you reach them. See [Limits and warnings](#limits-and-warnings). |
+| `hat usage alert …` | When to warn about the limits. |
+| `hat statusline install` | Show your limits in Claude Code and warn before you reach them; `uninstall` undoes it. See [Limits and warnings](#limits-and-warnings). |
 | `hat doctor` | Check Claude Code's setup. See [Doctor and clean](#doctor-and-clean). |
 | `hat clean` | Forget deleted folders Claude still remembers. |
 | `hat version` | Print the version. |
-
 
 ## Windows tray app
 
@@ -153,11 +157,11 @@ arrow at first; drag it onto the taskbar to keep it visible.
 ✓ personal@gmail.com  (personal@gmail.com's Organization)
   work@company.com  (Company)
 ─────────────
+Limits: 5h 62% ↻21:00 · 7d 31% ↻Sat 09:00
+─────────────
 Add account…
 Save current account
 Remove ▸
-─────────────
-Limits: 5h 62% ↻21:00 · 7d 31% ↻Sat 09:00
 ─────────────
 MCP servers ▸
 ─────────────
@@ -168,6 +172,9 @@ Quit
 - **Add account…** opens a console that walks you through signing in another account.
 - **Save current account** keeps the login Claude has now.
 - **Remove** forgets a saved account.
+- **Limits** shows the share of your 5-hour and weekly limits used, or today's tokens until the status
+  line is installed (see [Limits and warnings](#limits-and-warnings)). Past an alert it starts with
+  `⚠`, and so does the icon's tooltip.
 - **MCP servers** lists your user-scope MCP servers: click one to switch it on or off. Your
   [sets](#sets-mcp-servers-that-follow-your-account) are listed below them; click one to use it.
 - If an action fails, the error shows at the top of the menu. The app also logs to `%USERPROFILE%\.hatrack\tray.log`.
@@ -184,7 +191,7 @@ Hatrack.app puts a hat in the menu bar, with no Dock icon:
   app window if Chrome is installed, otherwise in your default browser.
 - **Add Account…** opens Terminal and runs `hat add` there, so you can pick the browser to sign in
   with and paste the code if asked. The new account shows up in the menu when sign-in finishes.
-- **Save Current Account** keeps the login Claude has now.
+- **Save Current Account** keeps the login Claude has now; **Remove** forgets one.
 - **Limits** shows the share of your 5-hour and weekly limits used, with `⚠ 86%` next to the hat when
   one passes its alert, or today's tokens until the status line is installed (see
   [Limits and warnings](#limits-and-warnings)).
@@ -363,7 +370,8 @@ hat mcp set link work me@company.com   # hat use me@company.com now also uses se
 hat mcp set link personal me@gmail.com
 ```
 
-With sets linked, `hat use` (or a click in the tray) switches the account and its MCP servers together.
+With sets linked, `hat use`, the tray, the menu bar and the dashboard all switch the account and its
+MCP servers together. Renaming an account in the dashboard keeps its link.
 
 ### How switching off works
 
@@ -392,13 +400,12 @@ $ hat usage
   `~/.hatrack/switches.jsonl`, and counts each response for the account in use at the time. Usage from
   before hat recorded anything shows as `(before hat)`.
 - **5-hour window:** subscription limits are counted in 5-hour windows. hat shows the open window of
-  each account and when it ends, estimated from your responses the way the limits reset.
+  each account and when it ends, estimated from your responses.
+- **Limits:** tokens do not say how close you are to a limit, since Anthropic weighs them in ways it
+  does not publish. With the [status line](#limits-and-warnings) installed, `hat usage` also lists the
+  share of each account's limits used, as Claude Code last reported it.
 - It reads only this machine's transcripts, so work on other machines is not counted, and Claude
-  deletes transcripts after `cleanupPeriodDays` (30 by default). The limits themselves weigh tokens in
-  ways Anthropic does not publish, so hat shows tokens, not a percentage of your limit.
-
-The tray menu shows today's tokens and when the current window resets, or, once the status line
-below is installed, the share of your limits used.
+  deletes transcripts after `cleanupPeriodDays` (30 by default).
 
 ### Limits and warnings
 
@@ -429,8 +436,11 @@ work · 5h 62% ↻21:00 · 7d 31% ↻Sat 09:00
 
 - A status line you had before keeps running, with hat's part after it, and comes back with
   `hat statusline uninstall`. Both change only `statusLine` in `~/.claude/settings.json`, after a backup.
-- The numbers update while Claude Code runs in a terminal and only for subscriptions; with an API
-  key there are none. They are as of the last response; the menus say so.
+- The numbers update while Claude Code runs in a terminal, and exist only for subscriptions; with an
+  API key there are none. They are as of the last response (`hat usage` shows when that was), and a
+  limit that has since reset drops out.
+- Desktop notifications use Notification Center on macOS, a toast on Windows (also from WSL), and
+  `notify-send` on Linux. If none shows, the `⚠` in the status line and the menus is still there.
 - hat only warns. Whether to stop, wait for the reset or switch accounts is up to you; see
   [Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) and
   [usage policy](https://www.anthropic.com/legal/aup).
@@ -550,21 +560,24 @@ back as it was.
   your home folder can read them, just as with Claude's own login. On macOS this means a saved login
   is less protected than the active one, which Claude keeps in the Keychain.
 - hatrack reads and writes Claude's login files (on macOS, Claude's Keychain items), its MCP server
-  settings and `~/.hatrack`. `hat usage` only reads the token counts in Claude's transcripts, not what
-  you wrote; `hat clean` changes only what it listed, and only with `--apply`. It does not touch
-  Claude's traffic, telemetry or anything else.
+  settings, the `statusLine` setting when you install the status line, and `~/.hatrack`. `hat usage` only reads the token counts in Claude's transcripts, not what
+  you wrote; `hat clean` changes only what it listed, and only with `--apply`; the status line only
+  stores the limit percentages Claude hands it. It does not touch Claude's traffic, telemetry or
+  anything else.
 - No telemetry, no accounts, no server. The macOS dashboard is a local page on `127.0.0.1` that
   needs a per-launch token, loads nothing from the internet, and stops when you quit Hatrack.
 
 Anthropic's terms do not allow sharing one subscription between people. hatrack is for switching
 between accounts that are yours. Found a security problem? See [SECURITY.md](SECURITY.md).
 
-## Limits
+## Known limitations
 
 - **Claude Code only** for now. Codex and other tools may come later. `hat mcp import --desktop` reads
   Claude Desktop's servers but does not change them.
-- The Windows tray and the macOS menu bar show user-scope MCP servers only; manage local and project ones with `hat mcp` in
-  the folder. The same goes for the macOS menu bar.
+- The Windows tray and the macOS menu bar show user-scope MCP servers only; manage local and project
+  ones with `hat mcp` in the folder.
+- Limit percentages come only from Claude Code in a terminal; the VS Code extension may not run
+  status lines.
 - `hat mcp test` speaks stdio and streamable HTTP; servers on the older `sse` transport show their state in Claude's `/mcp`.
 - **macOS app is not notarized**, so Gatekeeper asks before the first launch.
 - **Open sessions** may keep using the previous account until restarted.
@@ -583,6 +596,8 @@ between accounts that are yours. Found a security problem? See [SECURITY.md](SEC
 | No tray icon | Check the `^` overflow arrow. If the app is not running, start `hatrack-tray.exe` and check `%USERPROFILE%\.hatrack\tray.log`. |
 | An MCP server does not show up in Claude | Restart Claude. Then `hat mcp doctor`, and `hat mcp test <name>` to see the server's own error. |
 | `hat mcp test` says the server asks to sign in | It uses OAuth: sign in from Claude with `/mcp`. Or check the token in its headers. |
+| The status line shows no percentages | They appear after Claude's first response, for subscriptions only. Check `statusLine` in `~/.claude/settings.json` points at `hat` (`hat statusline install` again). |
+| No desktop notification for a limit | Allow notifications for Script Editor (macOS) or Windows PowerShell (Windows) in the system's notification settings; on Linux install `notify-send`. |
 | `keychain …` error on macOS | Unlock the login Keychain (Keychain Access, or `security unlock-keychain`) and retry. Over SSH the Keychain is usually locked. |
 | `hat` not found right after installing on Windows | Open a new terminal so it picks up the updated `PATH`. |
 | Windows SmartScreen warns about the exe | The binaries are not code-signed. Verify them as shown in [Verify a download](#verify-a-download). |
@@ -590,7 +605,12 @@ between accounts that are yours. Found a security problem? See [SECURITY.md](SEC
 ## Uninstall
 
 hatrack never changes Claude's login on its own, so after uninstalling, Claude keeps using whichever
-account was active.
+account was active. Before removing anything:
+
+```sh
+hat statusline uninstall   # if installed: otherwise Claude's status line points at a missing hat
+hat mcp                    # switched-off MCP servers live in ~/.hatrack; `hat mcp on` the ones to keep
+```
 
 **Windows:** quit the tray app, then in PowerShell:
 
@@ -629,7 +649,9 @@ cmd/hatrack-tray/     Windows tray app
 cmd/hatrack-gui/      macOS menu bar app
 internal/claude/      Claude logins: save, swap, switch history, forgetting deleted folders
 internal/mcp/         MCP servers: scopes, on/off, catalog, sets, test
-internal/usage/       token usage from Claude's transcripts
+internal/usage/       token usage from transcripts, limits from the status line
+internal/notify/      desktop notifications
+internal/traymenu/    menu items the Windows tray and the macOS menu bar share
 internal/atomicfile/  crash-safe file writes
 internal/gui/         the macOS dashboard: a local page and its API
 internal/tray/        the macOS menu bar
@@ -644,13 +666,15 @@ hatrack is an independent, unofficial project. It is **not affiliated with, endo
 by Anthropic**. "Claude", "Claude Code" and related names are trademarks of Anthropic, PBC, used here
 only to say what hatrack works with.
 
-hatrack works by reading and rewriting Claude Code's local login files. Their format is not a public
-interface and can change without notice. The software is provided **"as is", without warranty of any
+hatrack works by reading and rewriting Claude Code's local files (its login, settings and MCP server
+configuration) and, on macOS, its Keychain items. Their format is not a public interface and can
+change without notice. The software is provided **"as is", without warranty of any
 kind**, as set out in sections 7 and 8 of the [license](LICENSE). In particular:
 
 - **Use it at your own risk.** A bug, or a change in Claude Code, could sign you out or make a saved
-  login unusable. The worst case should be signing in again, but back up `~/.claude/.credentials.json`
-  and `~/.claude.json` if losing them would hurt.
+  login unusable. The worst case should be signing in again. hat keeps copies of `~/.claude.json` and
+  `settings.json` from before its changes in `~/.hatrack/backups`, but back up `~/.claude` and
+  `~/.claude.json` yourself if losing them would hurt.
 - **You are responsible for how you use your accounts.** Using hatrack must comply with
   [Anthropic's terms](https://www.anthropic.com/legal) and your organization's policies. Do not use it
   to share a subscription between people or to get around usage limits or other restrictions.
