@@ -1,12 +1,16 @@
 # hatrack
 
-[![ci](https://github.com/baodq97/hatrack/actions/workflows/ci.yml/badge.svg)](https://github.com/baodq97/hatrack/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/baodq97/hatrack)](https://github.com/baodq97/hatrack/releases/latest)
+[![ci](https://github.com/phongptn93/hatrack/actions/workflows/ci.yml/badge.svg)](https://github.com/phongptn93/hatrack/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/phongptn93/hatrack)](https://github.com/phongptn93/hatrack/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 A toolkit for Claude Code: switch the account it is signed in to without signing out, manage the MCP
 servers it loads (databases, Azure DevOps, GitHub and more), see the tokens you use per account, and
 keep its setup healthy.
+
+This repository builds on [baodq97/hatrack](https://github.com/baodq97/hatrack), which switches
+accounts; MCP servers, usage, limit warnings, doctor and clean are added here. Install from this
+repository to get them.
 
 If you have more than one Claude subscription (personal and work, or two plans), hatrack keeps each
 login and swaps the one Claude uses with one click in the Windows tray or the macOS menu bar, or one
@@ -60,12 +64,16 @@ now using work@company.com. If an open Claude session still shows the old accoun
 
 ## Install
 
+The commands below install the [latest release](https://github.com/phongptn93/hatrack/releases/latest)
+of this repository. If there is no release yet, or you want code newer than the latest one, see
+[Build from source](#build-from-source).
+
 ### Windows
 
 In PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/baodq97/hatrack/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/phongptn93/hatrack/main/install.ps1 | iex
 ```
 
 This installs `hat.exe` and `hatrack-tray.exe` to `%LOCALAPPDATA%\hatrack`, adds that folder to your
@@ -73,14 +81,14 @@ user `PATH`, starts the tray app, and adds it to `shell:startup` so it runs when
 Nothing needs admin rights.
 
 Prefer to look first? Download `hat-windows-amd64.exe` and `hatrack-tray-windows-amd64.exe` from the
-[latest release](https://github.com/baodq97/hatrack/releases/latest), rename them to `hat.exe` and
+[latest release](https://github.com/phongptn93/hatrack/releases/latest), rename them to `hat.exe` and
 `hatrack-tray.exe`, and keep them in the same folder. Read [install.ps1](install.ps1) to see exactly what
 the script does.
 
 ### macOS, Linux and WSL
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/baodq97/hatrack/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/phongptn93/hatrack/main/install.sh | sh
 ```
 
 This puts `hat` in `~/.local/bin` (override with `HAT_INSTALL_DIR`). Builds exist for amd64 and arm64
@@ -88,7 +96,7 @@ This puts `hat` in `~/.local/bin` (override with `HAT_INSTALL_DIR`). Builds exis
 
 ### macOS menu bar app
 
-Download `Hatrack-macos.zip` from the [latest release](https://github.com/baodq97/hatrack/releases/latest),
+Download `Hatrack-macos.zip` from the [latest release](https://github.com/phongptn93/hatrack/releases/latest),
 unzip it and move `Hatrack.app` to Applications. It runs on Apple silicon and Intel Macs (macOS 11
 or later). The app is not notarized by Apple, so macOS blocks the first launch. Either run
 
@@ -109,7 +117,7 @@ Every release lists SHA-256 sums in `checksums.txt`, and each binary has a signe
 attestation that proves it was built by this repository's release workflow:
 
 ```sh
-gh attestation verify hat-linux-amd64 --repo baodq97/hatrack
+gh attestation verify hat-linux-amd64 --repo phongptn93/hatrack
 ```
 
 The macOS app ships as `Hatrack-macos.zip`, with its own `Hatrack-macos.zip.sha256` and attestation.
@@ -635,6 +643,7 @@ rm -r ~/.hatrack   # saved logins, switched-off MCP servers, sets, switch histor
 Needs Go (see `go.mod` for the version). No C compiler is needed, except for the macOS app.
 
 ```sh
+git clone https://github.com/phongptn93/hatrack && cd hatrack
 go test ./...
 go build ./cmd/hat                                                         # CLI for this OS
 GOOS=windows go build -ldflags -H=windowsgui -o hatrack-tray.exe ./cmd/hatrack-tray  # tray, from any OS

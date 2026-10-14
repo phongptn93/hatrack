@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs hat for macOS, Linux and WSL.
-# curl -fsSL https://raw.githubusercontent.com/baodq97/hatrack/main/install.sh | sh
+# curl -fsSL https://raw.githubusercontent.com/phongptn93/hatrack/main/install.sh | sh
 set -eu
 case "$(uname -s)" in
   Linux) os=linux ;;
@@ -14,7 +14,7 @@ case "$(uname -m)" in
 esac
 dir="${HAT_INSTALL_DIR:-$HOME/.local/bin}"
 mkdir -p "$dir"
-curl -fsSL "https://github.com/baodq97/hatrack/releases/latest/download/hat-$os-$arch" -o "$dir/hat.tmp"
+curl -fsSL "https://github.com/phongptn93/hatrack/releases/latest/download/hat-$os-$arch" -o "$dir/hat.tmp"
 chmod +x "$dir/hat.tmp" && mv "$dir/hat.tmp" "$dir/hat"
 echo "installed $dir/hat"
 case ":$PATH:" in *":$dir:"*) ;; *) echo "add $dir to your PATH" ;; esac

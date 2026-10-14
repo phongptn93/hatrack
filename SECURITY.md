@@ -5,7 +5,7 @@ hatrack copies Claude Code login tokens between files on your machine, so securi
 ## Reporting
 
 Please report security problems privately through
-[GitHub security advisories](https://github.com/baodq97/hatrack/security/advisories/new),
+[GitHub security advisories](https://github.com/phongptn93/hatrack/security/advisories/new),
 not in a public issue. Include what you found, how to reproduce it, and what an attacker could do with it.
 
 You will get an answer within a week.
