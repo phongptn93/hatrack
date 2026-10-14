@@ -1,4 +1,5 @@
-// Command hat switches the account Claude Code is signed in to, without signing out.
+// Command hat switches the account Claude Code is signed in to, without signing out, and
+// manages the MCP servers Claude Code loads.
 package main
 
 import (
@@ -9,15 +10,21 @@ import (
 	"strings"
 
 	"github.com/baodq97/hatrack/internal/claude"
+	"github.com/baodq97/hatrack/internal/mcp"
 )
 
-const usage = `hat - switch Claude Code accounts without signing out
+const helpText = `hat - switch Claude Code accounts and manage its MCP servers
 
   hat               list accounts (* = active)
   hat use <name>    switch to an account
   hat add [name]    sign in another account; the active one is untouched
   hat save [name]   keep the account Claude is signed in to now
   hat rm <name>     forget an account
+  hat mcp …         manage MCP servers (databases, Azure DevOps…): hat mcp help
+  hat usage         tokens used by day, project, model, account; the 5-hour window
+  hat statusline install   show your limits in Claude Code and warn before you hit them
+  hat doctor        check Claude Code's setup: login, files, MCP servers
+  hat clean         forget deleted folders Claude still remembers (asks first)
   hat version       print the version
 
 Names default to the account's email.`
@@ -39,6 +46,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "mcp" {
+		return runMCP(args[1:])
+	}
 	s, err := claude.Default()
 	if err != nil {
 		return err
@@ -64,14 +74,25 @@ func run(args []string) error {
 			if p.Active {
 				mark = "*"
 			}
-			fmt.Printf("%s %-30s %s  %s\n", mark, p.Name, p.Email, p.Org)
+			plan := ""
+			if p.Plan != "" {
+				plan = "  [" + p.Plan + "]"
+			}
+			fmt.Printf("%s %-30s %s  %s%s\n", mark, p.Name, p.Email, p.Org, plan)
 		}
 		return nil
 	case cmd == "use" && arg != "":
-		if err := s.Use(arg); err != nil {
+		set, changed, err := mcp.SwitchAccount(s, arg)
+		if err != nil && set == "" {
 			return err
 		}
 		fmt.Printf("now using %s. If an open Claude session still shows the old account, restart it (VS Code: Reload Window).\n", arg)
+		if err != nil {
+			return fmt.Errorf("switched account, but MCP set %s: %w", set, err)
+		}
+		if set != "" {
+			fmt.Printf("MCP set %s: %s\n", set, strings.Join(append([]string{}, changed...), " "))
+		}
 		return nil
 	case cmd == "add":
 		return add(s, arg)
@@ -88,14 +109,22 @@ func run(args []string) error {
 		}
 		fmt.Println("removed", arg)
 		return nil
+	case cmd == "statusline":
+		return statusline(s, args[1:])
+	case cmd == "usage":
+		return runUsage(s, args[1:])
+	case cmd == "doctor":
+		return doctor(s)
+	case cmd == "clean":
+		return clean(s, args[1:])
 	case cmd == "version" || cmd == "--version":
 		fmt.Println("hat", version)
 		return nil
 	case cmd == "-h" || cmd == "--help" || cmd == "help":
-		fmt.Println(usage)
+		fmt.Println(helpText)
 		return nil
 	}
-	return fmt.Errorf("unknown command\n\n%s", usage)
+	return fmt.Errorf("unknown command\n\n%s", helpText)
 }
 
 const addPrompt = `Add a Claude account

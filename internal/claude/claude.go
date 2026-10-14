@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/baodq97/hatrack/internal/atomicfile"
 )
 
 const (
@@ -45,6 +47,7 @@ type Profile struct {
 	Name   string
 	Email  string
 	Org    string
+	Plan   string // subscription, such as pro or max, when the login says
 	Active bool
 }
 
@@ -108,7 +111,8 @@ func (s *Store) List() ([]Profile, error) {
 		if err != nil {
 			continue // half-written or foreign folder
 		}
-		out = append(out, Profile{Name: e.Name(), Email: a.EmailAddress, Org: a.OrganizationName, Active: curErr == nil && a.same(cur)})
+		out = append(out, Profile{Name: e.Name(), Email: a.EmailAddress, Org: a.OrganizationName,
+			Plan: parkedPlan(filepath.Join(s.Dir, e.Name(), parkedCreds)), Active: curErr == nil && a.same(cur)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -120,7 +124,22 @@ func (s *Store) Save(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.park(name, creds, s.GlobalJSON)
+	name, err = s.park(name, creds, s.GlobalJSON)
+	if err == nil {
+		s.logSwitch(name) // it is in use now; usage from here on counts for it
+	}
+	return name, err
+}
+
+// plan reads the subscription type from credentials; the tokens are not looked at.
+func plan(creds []byte) string {
+	var c struct {
+		ClaudeAiOauth struct {
+			SubscriptionType string `json:"subscriptionType"`
+		} `json:"claudeAiOauth"`
+	}
+	json.Unmarshal(creds, &c)
+	return c.ClaudeAiOauth.SubscriptionType
 }
 
 // Add signs a new account in through login, run with CLAUDE_CONFIG_DIR set to a scratch
@@ -182,7 +201,11 @@ func (s *Store) Use(name string) error {
 	if err := s.writeCreds(creds); err != nil {
 		return err
 	}
-	return setAccount(s.GlobalJSON, raw)
+	if err := s.setAccount(raw); err != nil {
+		return err
+	}
+	s.logSwitch(name)
+	return nil
 }
 
 func (s *Store) Remove(name string) error {
@@ -196,7 +219,6 @@ func (s *Store) Remove(name string) error {
 	return os.RemoveAll(dir)
 }
 
-// Rename renames a saved profile folder.
 // Rename gives a saved account another name. The active login is not touched.
 func (s *Store) Rename(oldName, newName string) error {
 	for _, n := range []string{oldName, newName} {
@@ -211,7 +233,10 @@ func (s *Store) Rename(oldName, newName string) error {
 	if _, err := os.Lstat(newDir); err == nil {
 		return fmt.Errorf("profile %q already exists", newName)
 	}
-	return os.Rename(filepath.Join(s.Dir, oldName), newDir)
+	if err := os.Rename(filepath.Join(s.Dir, oldName), newDir); err != nil {
+		return err
+	}
+	return s.renameInHistory(oldName, newName)
 }
 
 // parkCurrent writes the active login back into its profile, creating one if none matches.
@@ -367,48 +392,48 @@ func readAccount(path string) (json.RawMessage, account, error) {
 }
 
 // setAccount replaces oauthAccount in .claude.json and keeps every other key as it was.
-func setAccount(path string, raw json.RawMessage) error {
-	m := map[string]json.RawMessage{}
-	b, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if len(b) > 0 {
-		if err := json.Unmarshal(b, &m); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+func (s *Store) setAccount(raw json.RawMessage) error {
+	return atomicfile.Edit(s.GlobalJSON, s.BackupDir(), backups, func(b []byte) ([]byte, error) {
+		m := map[string]json.RawMessage{}
+		if len(bytes.TrimSpace(b)) > 0 {
+			if err := json.Unmarshal(b, &m); err != nil {
+				return nil, fmt.Errorf("%s: %w", s.GlobalJSON, err)
+			}
 		}
-	}
-	m[accountKey] = raw
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(m); err != nil {
-		return err
-	}
-	return writeAtomic(path, buf.Bytes())
+		m[accountKey] = raw
+		return atomicfile.JSON(m)
+	})
 }
 
-// writeAtomic replaces path in one rename so a crash never leaves half a login file.
-func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Chmod(0o600); err != nil && !errors.Is(err, errors.ErrUnsupported) {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+// BackupDir holds copies of .claude.json from before each change hatrack made to it.
+func (s *Store) BackupDir() string { return filepath.Join(filepath.Dir(s.Dir), "backups") }
+
+const backups = 10
+
+var writeAtomic = atomicfile.Write
+
+func parkedPlan(path string) string {
+	b, _ := os.ReadFile(path)
+	return plan(b)
 }
+
+// Current describes the login Claude uses now. Name is the saved profile holding it, if any.
+func (s *Store) Current() (Profile, error) {
+	_, a, err := readAccount(s.GlobalJSON)
+	if err != nil {
+		return Profile{}, err
+	}
+	creds, _ := s.readCreds(s.Service, s.ConfigDir) // the keychain on macOS, else the file
+	p := Profile{Email: a.EmailAddress, Org: a.OrganizationName, Plan: plan(creds), Active: true}
+	if ps, err := s.List(); err == nil {
+		for _, q := range ps {
+			if q.Active {
+				p.Name = q.Name
+			}
+		}
+	}
+	return p, nil
+}
+
+// CredentialsPath is the file holding the active login's tokens.
+func (s *Store) CredentialsPath() string { return filepath.Join(s.ConfigDir, credsFile) }

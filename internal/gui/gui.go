@@ -21,6 +21,7 @@ import (
 	"runtime"
 
 	"github.com/baodq97/hatrack/internal/claude"
+	"github.com/baodq97/hatrack/internal/mcp"
 )
 
 //go:embed assets/*
@@ -166,7 +167,7 @@ func (srv *Server) handleUseProfile(w http.ResponseWriter, r *http.Request) {
 		fail(w, errors.New("invalid name"), http.StatusBadRequest)
 		return
 	}
-	if err := srv.Store.Use(req.Name); err != nil {
+	if _, _, err := mcp.SwitchAccount(srv.Store, req.Name); err != nil { // with its linked MCP set
 		fail(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -215,7 +216,7 @@ func (srv *Server) handleRenameProfile(w http.ResponseWriter, r *http.Request) {
 		fail(w, err, http.StatusBadRequest)
 		return
 	}
-	if err := srv.Store.Rename(req.OldName, req.NewName); err != nil {
+	if err := mcp.RenameAccount(srv.Store, req.OldName, req.NewName); err != nil {
 		fail(w, err, http.StatusBadRequest)
 		return
 	}
