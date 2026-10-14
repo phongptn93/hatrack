@@ -2,15 +2,34 @@ name: release
 on:
   push:
     tags: ['v*']
+  # or Actions → release → Run workflow: tags main as the version and releases it
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, such as v0.2.0
+        required: true
 permissions:
   contents: write     # create the release
   id-token: write     # sign build provenance
   attestations: write
+env:
+  VERSION: ${{ inputs.version || github.ref_name }}
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: check the version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "bad version $VERSION: use vX.Y.Z" >&2; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "release from main only" >&2; exit 1; }
+            if gh release view "$VERSION" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+              echo "$VERSION already exists" >&2; exit 1
+            fi
+          fi
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -20,7 +39,7 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir dist
-          ld="-s -w -X main.version=$GITHUB_REF_NAME"
+          ld="-s -w -X main.version=$VERSION"
           for arch in amd64 arm64; do
             GOOS=linux GOARCH=$arch go build -trimpath -ldflags "$ld" -o dist/hat-linux-$arch ./cmd/hat
             GOOS=darwin GOARCH=$arch go build -trimpath -ldflags "$ld" -o dist/hat-darwin-$arch ./cmd/hat
@@ -31,7 +50,8 @@ jobs:
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+      # creates the tag at this commit when the workflow was started by hand
+      - run: gh release create "$VERSION" dist/* --generate-notes --target "$GITHUB_SHA"
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -41,13 +61,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}   # the commit the release job built, even if main moved since
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: build
         env:
           NO_INSTALL: '1'
-          VERSION: ${{ github.ref_name }}
         run: |
           ./build-mac-app.sh
           ditto -c -k --keepParent Hatrack.app Hatrack-macos.zip
@@ -55,6 +76,6 @@ jobs:
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: Hatrack-macos.zip
-      - run: gh release upload "$GITHUB_REF_NAME" Hatrack-macos.zip Hatrack-macos.zip.sha256
+      - run: gh release upload "$VERSION" Hatrack-macos.zip Hatrack-macos.zip.sha256
         env:
           GH_TOKEN: ${{ github.token }}
