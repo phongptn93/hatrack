@@ -56,7 +56,7 @@ type tray struct {
 	s  *claude.Store
 	m  *mcp.Config
 
-	usage usage.TodayCache
+	usage usage.MenuCache
 	err   error // last failed action, shown at the top of the menu
 	last  string
 	done  chan struct{}
@@ -78,8 +78,8 @@ func (t *tray) render() {
 	if err == nil {
 		mst, err = traymenu.LoadMCP(t.m)
 	}
-	today := t.usage.Line(t.s)
-	key := fmt.Sprint(ps, err, mst, today)
+	today, warn, _ := t.usage.Line(t.s)
+	key := fmt.Sprint(ps, err, mst, today, warn)
 	if key == t.last {
 		return
 	}
@@ -103,6 +103,9 @@ func (t *tray) render() {
 			tip = "hatrack: " + p.Name
 		}
 		t.on(systray.AddMenuItemCheckbox(label(p), p.Email, p.Active), func() error { return t.use(p.Name) })
+	}
+	if warn {
+		tip = "⚠ " + today + "\n" + tip
 	}
 	systray.SetTooltip(tip)
 	if today != "" {

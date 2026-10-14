@@ -42,6 +42,7 @@ now using work@company.com. If an open Claude session still shows the old accoun
 - [Adding an account](#adding-an-account)
 - [MCP servers](#mcp-servers)
 - [Usage](#usage)
+- [Limits and warnings](#limits-and-warnings)
 - [Doctor and clean](#doctor-and-clean)
 - [VS Code](#vs-code)
 - [WSL and Windows](#wsl-and-windows)
@@ -137,6 +138,7 @@ Profile names default to the account's email. Pass a name to pick your own: `hat
 | `hat rm <name>` | Forget a saved account. Does not sign anything out. |
 | `hat mcp …` | Manage MCP servers. See [MCP servers](#mcp-servers). |
 | `hat usage` | Tokens used. See [Usage](#usage). |
+| `hat statusline install` | Show your limits in Claude Code and warn before you reach them. See [Limits and warnings](#limits-and-warnings). |
 | `hat doctor` | Check Claude Code's setup. See [Doctor and clean](#doctor-and-clean). |
 | `hat clean` | Forget deleted folders Claude still remembers. |
 | `hat version` | Print the version. |
@@ -155,7 +157,7 @@ Add account…
 Save current account
 Remove ▸
 ─────────────
-Today: 15.5M tokens · window resets 21:00
+Limits: 5h 62% ↻21:00 · 7d 31% ↻Sat 09:00
 ─────────────
 MCP servers ▸
 ─────────────
@@ -183,7 +185,9 @@ Hatrack.app puts a hat in the menu bar, with no Dock icon:
 - **Add Account…** opens Terminal and runs `hat add` there, so you can pick the browser to sign in
   with and paste the code if asked. The new account shows up in the menu when sign-in finishes.
 - **Save Current Account** keeps the login Claude has now.
-- **Today: … tokens** shows today's usage and when the current 5-hour window resets (see [Usage](#usage)).
+- **Limits** shows the share of your 5-hour and weekly limits used, with `⚠ 86%` next to the hat when
+  one passes its alert, or today's tokens until the status line is installed (see
+  [Limits and warnings](#limits-and-warnings)).
 - **MCP servers** lists your user-scope MCP servers: click one to switch it on or off, or pick a
   [set](#sets-mcp-servers-that-follow-your-account). A set linked to an account follows it here too.
 
@@ -393,7 +397,43 @@ $ hat usage
   deletes transcripts after `cleanupPeriodDays` (30 by default). The limits themselves weigh tokens in
   ways Anthropic does not publish, so hat shows tokens, not a percentage of your limit.
 
-The tray menu shows today's tokens and when the current window resets.
+The tray menu shows today's tokens and when the current window resets, or, once the status line
+below is installed, the share of your limits used.
+
+### Limits and warnings
+
+Claude Code tells its status line how much of your subscription's 5-hour and weekly limits you have
+used, as Anthropic's API reports it. hat can be that status line:
+
+```sh
+hat statusline install
+```
+
+Claude Code then shows, at the bottom of its window:
+
+```
+work · 5h 62% ↻21:00 · 7d 31% ↻Sat 09:00
+```
+
+- hat records the numbers for the account in use, so `hat usage`, the Windows tray and the macOS menu
+  bar show them too.
+- **Warnings:** when a limit passes its alert, the status line marks it `⚠`, the macOS menu bar shows
+  `⚠ 86%` next to the hat, and hat shows a desktop notification, once per account, limit and window.
+  Alerts default to 80% of the 5-hour limit and 90% of the weekly one:
+
+  ```sh
+  hat usage alert                 # show the alerts
+  hat usage alert 70 --weekly 95  # change them
+  hat usage alert off             # no warnings; the numbers still show
+  ```
+
+- A status line you had before keeps running, with hat's part after it, and comes back with
+  `hat statusline uninstall`. Both change only `statusLine` in `~/.claude/settings.json`, after a backup.
+- The numbers update while Claude Code runs in a terminal and only for subscriptions; with an API
+  key there are none. They are as of the last response; the menus say so.
+- hat only warns. Whether to stop, wait for the reset or switch accounts is up to you; see
+  [Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) and
+  [usage policy](https://www.anthropic.com/legal/aup).
 
 ## Doctor and clean
 

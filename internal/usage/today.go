@@ -2,6 +2,7 @@ package usage
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"sync"
 	"time"
@@ -50,18 +51,52 @@ func Short(v int64) string {
 	return fmt.Sprint(v)
 }
 
-// TodayCache recomputes Today at most once a minute, for menus redrawn every few seconds.
-type TodayCache struct {
+// ActiveAccount names the account Claude uses now the way hat records it: its saved name, else
+// its email.
+func ActiveAccount(s *claude.Store) string {
+	cur, err := s.Current()
+	if err != nil {
+		return ""
+	}
+	if cur.Name != "" {
+		return cur.Name
+	}
+	return cur.Email
+}
+
+// MenuCache builds the usage line of the tray and the menu bar: the share of the limits used, as
+// Claude Code last reported it, else today's tokens. Tokens are recounted once a minute; the
+// limits, a small file, on every call.
+type MenuCache struct {
 	mu   sync.Mutex
 	line string
 	at   time.Time
 }
 
-func (c *TodayCache) Line(s *claude.Store) string {
+// Line returns the line and whether a limit is past its alert, then title is its short form
+// for the macOS menu bar ("⚠ 86%").
+func (c *MenuCache) Line(s *claude.Store) (line string, warn bool, title string) {
+	if s == nil {
+		return "", false, ""
+	}
+	now := time.Now()
+	if l, err := LoadLimits(filepath.Dir(s.Dir)); err == nil {
+		acct := ActiveAccount(s)
+		if line, warn := l.Line(acct, now); line != "" {
+			if warn {
+				max := 0.0
+				for _, w := range l.Warnings(acct, now) {
+					max = math.Max(max, w.Percent)
+				}
+				title = fmt.Sprintf("⚠ %.0f%%", math.Floor(max))
+			}
+			return "Limits: " + line, warn, title
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if s != nil && time.Since(c.at) > time.Minute {
-		c.line, c.at = Today(s, time.Now()), time.Now()
+	if time.Since(c.at) > time.Minute {
+		c.line, c.at = Today(s, now), now
 	}
-	return c.line
+	return c.line, false, ""
 }

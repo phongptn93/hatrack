@@ -20,12 +20,17 @@ const usageUsage = `hat usage - tokens Claude Code used, read from its transcrip
   hat usage                  last 7 days, by day, and the current 5-hour window
   hat usage --days 30        a longer stretch
   hat usage --by project     by day, project, model, account or session
+  hat usage alert [80 [--weekly 90] | on | off]
+                             when to warn about the 5-hour and weekly limits
 
 Accounts are known from the moment hat first saved or switched to them.`
 
 const untracked = "(before hat)"
 
 func runUsage(s *claude.Store, args []string) error {
+	if len(args) > 0 && args[0] == "alert" {
+		return usageAlert(s, args[1:])
+	}
 	fs := flag.NewFlagSet("hat usage", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	days := fs.Int("days", 7, "how many days back, today included")
@@ -67,7 +72,8 @@ func runUsage(s *claude.Store, args []string) error {
 		}
 	}
 	if len(inRange) == 0 {
-		fmt.Printf("no Claude Code usage since %s\n", since.Format("2006-01-02"))
+		fmt.Printf("no Claude Code usage since %s\n\n", since.Format("2006-01-02"))
+		printLimits(s, now)
 		return nil
 	}
 	rows := usage.Group(inRange, key)
@@ -108,7 +114,9 @@ func runUsage(s *claude.Store, args []string) error {
 	if !open {
 		fmt.Println("No 5-hour usage window open now.")
 	}
-	fmt.Println("Counted from transcripts on this machine only. Anthropic's limits weigh tokens in ways that are not public.")
+	fmt.Println()
+	printLimits(s, now)
+	fmt.Println("Tokens are counted from transcripts on this machine only.")
 	return nil
 }
 
@@ -155,4 +163,40 @@ func minTime(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+// printLimits shows the share of each account's limits used, as Claude Code last reported it.
+func printLimits(s *claude.Store, now time.Time) {
+	l, err := usage.LoadLimits(hatDir(s))
+	if err != nil {
+		return
+	}
+	shown := false
+	for _, acct := range sortedKeys(l.Accounts) {
+		line, warn := l.Line(acct, now)
+		if line == "" {
+			continue
+		}
+		if !shown {
+			fmt.Println("Limits, as Claude Code last reported them:")
+			shown = true
+		}
+		mark := " "
+		if warn {
+			mark = "⚠"
+		}
+		fmt.Printf("%s %s: %s  (as of %s)\n", mark, acct, line, l.Accounts[acct].Updated.Local().Format("Jan 2 15:04"))
+	}
+	if !shown && !statuslineInstalled(s) {
+		fmt.Println("To see how much of your limits is used, and be warned before you reach them: hat statusline install")
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -24,7 +24,7 @@ type Tray struct {
 	mu           sync.Mutex
 	s            *claude.Store
 	m            *mcp.Config // user-scope MCP servers; nil if their config could not be found
-	usage        usage.TodayCache
+	usage        usage.MenuCache
 	err          error
 	last         string
 	done         chan struct{}
@@ -68,8 +68,8 @@ func (t *Tray) render() {
 	if err == nil {
 		mst, err = traymenu.LoadMCP(t.m)
 	}
-	today := t.usage.Line(t.s)
-	key := fmt.Sprint(ps, err, mst, today)
+	today, warn, title := t.usage.Line(t.s)
+	key := fmt.Sprint(ps, err, mst, today, warn)
 	if key == t.last {
 		return
 	}
@@ -105,7 +105,11 @@ func (t *Tray) render() {
 		})
 	}
 
+	if warn {
+		tip = title + " · " + tip
+	}
 	systray.SetTooltip(tip)
+	systray.SetTitle(title) // "⚠ 86%" next to the hat while a limit is past its alert
 	if today != "" {
 		systray.AddSeparator()
 		traymenu.AddUsage(today)

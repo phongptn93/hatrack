@@ -22,6 +22,7 @@ const helpText = `hat - switch Claude Code accounts and manage its MCP servers
   hat rm <name>     forget an account
   hat mcp …         manage MCP servers (databases, Azure DevOps…): hat mcp help
   hat usage         tokens used by day, project, model, account; the 5-hour window
+  hat statusline install   show your limits in Claude Code and warn before you hit them
   hat doctor        check Claude Code's setup: login, files, MCP servers
   hat clean         forget deleted folders Claude still remembers (asks first)
   hat version       print the version
@@ -108,6 +109,8 @@ func run(args []string) error {
 		}
 		fmt.Println("removed", arg)
 		return nil
+	case cmd == "statusline":
+		return statusline(s, args[1:])
 	case cmd == "usage":
 		return runUsage(s, args[1:])
 	case cmd == "doctor":
