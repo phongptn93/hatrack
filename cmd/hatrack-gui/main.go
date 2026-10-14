@@ -42,5 +42,5 @@ func main() {
 	// Run macOS Menu Bar Tray icon on main thread
 	tray.Start(store, func() {
 		_ = srv.OpenAppWindow()
-	}, func() error { return gui.OpenAddInTerminal("") })
+	}, func() error { return gui.OpenAddInTerminal("") }, func() error { return gui.OpenHatInTerminal("mcp", "add") })
 }

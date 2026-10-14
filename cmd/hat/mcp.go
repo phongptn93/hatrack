@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -23,6 +24,7 @@ const mcpUsage = `hat mcp - manage the MCP servers Claude Code loads
 
   hat mcp [ls]                     list servers for this folder (user, local, project scope)
   hat mcp catalog                  list ready-made servers: databases, Azure DevOps, GitHub…
+  hat mcp add                      pick a server from the catalog and answer a few questions
   hat mcp add <name> --from <template> [--var K=V]…
   hat mcp add <name> [-e K=V]… -- <command> [args…]
   hat mcp add <name> --url <url> [--transport http|sse] [-H "Key: value"]…
@@ -251,6 +253,15 @@ func mcpAdd(c *mcp.Config, args []string) error {
 		return fmt.Errorf("unexpected %q before --", pos[0])
 	}
 
+	// bare `hat mcp add`, as the tray runs it: pick a template from the catalog
+	picked := false
+	if name == "" && *from == "" && *url == "" && len(command) == 0 && term.IsTerminal(int(os.Stdin.Fd())) {
+		if name, *from, err = pickTemplate(c, os.Stdin, os.Stdout); err != nil {
+			return err
+		}
+		picked = true
+	}
+
 	var sp mcp.Spec
 	switch {
 	case *from != "":
@@ -319,11 +330,63 @@ func mcpAdd(c *mcp.Config, args []string) error {
 	for _, issue := range mcp.Check(mcp.Server{Name: name, Scope: scope.s, Enabled: true, Spec: sp}) {
 		fmt.Println("  warning:", issue)
 	}
+	if !*test && picked {
+		*test = yes("Test that it starts now?")
+	}
 	if *test {
 		return testOne(name, sp, 90*time.Second)
 	}
 	fmt.Printf("Check it starts with: hat mcp test %s\n", name)
 	return nil
+}
+
+// pickTemplate lists the catalog numbered and asks which template to add, and under what name.
+func pickTemplate(c *mcp.Config, r io.Reader, out io.Writer) (name, template string, err error) {
+	ts, err := c.Catalog()
+	if err != nil {
+		return "", "", err
+	}
+	if len(ts) == 0 {
+		return "", "", errors.New("the catalog is empty: hat mcp add <name> --url <url> | -- <command> [args…]")
+	}
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for i, t := range ts {
+		fmt.Fprintf(w, "%3d. %s\t%s\t%s\n", i+1, t.Name, t.Title, t.Description)
+	}
+	w.Flush()
+	in := bufio.NewReader(r)
+	var t mcp.Template
+	for {
+		fmt.Fprint(out, "\nWhich one to add (number or name)? ")
+		s, err := in.ReadString('\n')
+		s = strings.TrimSpace(s)
+		if err != nil && s == "" {
+			return "", "", errors.New("cancelled")
+		}
+		if n, convErr := strconv.Atoi(s); convErr == nil && n >= 1 && n <= len(ts) {
+			t = ts[n-1]
+			break
+		}
+		if i := slices.IndexFunc(ts, func(t mcp.Template) bool { return strings.EqualFold(t.Name, s) }); i >= 0 {
+			t = ts[i]
+			break
+		}
+		fmt.Fprintf(out, "no %q in the list", s)
+	}
+	fmt.Fprintf(out, "Name it [%s]: ", t.Name)
+	s, _ := in.ReadString('\n')
+	if name = strings.TrimSpace(s); name == "" {
+		name = t.Name
+	}
+	return name, t.Name, nil
+}
+
+// yes asks a question that defaults to yes.
+func yes(q string) bool {
+	fmt.Printf("%s [Y/n] ", q)
+	s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	s = strings.ToLower(strings.TrimSpace(s))
+	return s == "" || s == "y" || s == "yes"
 }
 
 // ask prompts on the terminal for template values not given with --var.

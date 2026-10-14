@@ -113,7 +113,7 @@ func (t *tray) render() {
 		traymenu.AddUsage(today)
 	}
 	systray.AddSeparator()
-	t.on(systray.AddMenuItem("Add account…", "Sign in another account in a console window"), t.openAdd)
+	t.on(systray.AddMenuItem("Add account…", "Sign in another account in a console window"), func() error { return openHat("add") })
 	t.on(systray.AddMenuItem("Save current account", "Keep the account Claude is signed in to now"), func() error {
 		_, err := t.s.Save("")
 		return err
@@ -125,7 +125,7 @@ func (t *tray) render() {
 		}
 	}
 	systray.AddSeparator()
-	traymenu.AddMCP(t.m, mst, t.on)
+	traymenu.AddMCP(t.m, mst, t.on, func() error { return openHat("mcp add") })
 	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "")
 	go func() {
@@ -167,16 +167,16 @@ func (t *tray) on(item *systray.MenuItem, fn func() error) {
 	}()
 }
 
-// openAdd runs `hat add` in a console kept open, so the sign-in prompt and its result stay readable.
+// openHat runs `hat <args>` in a console kept open, so its prompts and result stay readable.
 // It calls CreateProcess itself: os/exec always hands the child std handles, NUL for a GUI
 // parent, which leaves the new console blank and makes cmd exit at once.
-func (t *tray) openAdd() error {
+func openHat(args string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
 	// cmd keeps the quotes around a lone executable path, spaces and all
-	line, err := windows.UTF16PtrFromString(`cmd.exe /k "` + filepath.Join(filepath.Dir(exe), "hat.exe") + `" add`)
+	line, err := windows.UTF16PtrFromString(`cmd.exe /k "` + filepath.Join(filepath.Dir(exe), "hat.exe") + `" ` + args)
 	if err != nil {
 		return err
 	}

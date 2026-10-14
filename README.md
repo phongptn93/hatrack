@@ -185,6 +185,8 @@ Quit
   `⚠`, and so does the icon's tooltip.
 - **MCP servers** lists your user-scope MCP servers: click one to switch it on or off. Your
   [sets](#sets-mcp-servers-that-follow-your-account) are listed below them; click one to use it.
+  **Add server…** at the top opens a console running `hat mcp add`: pick one from the catalog and
+  answer its questions.
 - If an action fails, the error shows at the top of the menu. The app also logs to `%USERPROFILE%\.hatrack\tray.log`.
 
 The menu refreshes every few seconds, so changes made with `hat` show up on their own. Quitting the
@@ -205,6 +207,7 @@ Hatrack.app puts a hat in the menu bar, with no Dock icon:
   [Limits and warnings](#limits-and-warnings)).
 - **MCP servers** lists your user-scope MCP servers: click one to switch it on or off, or pick a
   [set](#sets-mcp-servers-that-follow-your-account). A set linked to an account follows it here too.
+  **Add server…** opens Terminal and runs `hat mcp add` there to add one from the catalog.
 
 The dashboard is served only on `127.0.0.1`. Each launch makes a random token that only the window
 Hatrack opens receives, and every action must carry it, so other web pages cannot switch or remove
@@ -267,6 +270,7 @@ when it starts.
 |---|---|
 | `hat mcp` | List servers for the current folder. Secrets are hidden. |
 | `hat mcp catalog` | List ready-made servers. |
+| `hat mcp add` | Pick one from the catalog, name it, answer its questions, and test that it starts. |
 | `hat mcp add <name> --from <template>` | Add one from the catalog. Asks for what it needs (connection string, organization…), or take them with `--var NAME=value`. |
 | `hat mcp add <name> -- <command> [args…]` | Add a local (stdio) server. `-e KEY=value` sets its environment. |
 | `hat mcp add <name> --url <url>` | Add a remote server. `--transport sse` for older servers, `-H "Key: value"` for headers. |

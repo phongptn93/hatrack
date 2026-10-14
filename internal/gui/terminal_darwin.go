@@ -8,21 +8,29 @@ import (
 	"strings"
 )
 
-// OpenAddInTerminal runs `hat add [name]` in a new Terminal window. It goes through a
-// .command file, which Terminal opens on its own, so macOS asks for no automation rights.
+// OpenAddInTerminal runs `hat add [name]` in a new Terminal window.
 func OpenAddInTerminal(name string) error {
+	if name == "" {
+		return OpenHatInTerminal("add")
+	}
+	return OpenHatInTerminal("add", name)
+}
+
+// OpenHatInTerminal runs `hat <args>` in a new Terminal window. It goes through a .command file,
+// which Terminal opens on its own, so macOS asks for no automation rights.
+func OpenHatInTerminal(args ...string) error {
 	hat, err := findHat()
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "hatrack-add-")
+	dir, err := os.MkdirTemp("", "hatrack-")
 	if err != nil {
 		return err
 	}
-	script := filepath.Join(dir, "add.command")
-	cmd := shellQuote(hat) + " add"
-	if name != "" {
-		cmd += " " + shellQuote(name)
+	script := filepath.Join(dir, "hat.command")
+	cmd := shellQuote(hat)
+	for _, a := range args {
+		cmd += " " + shellQuote(a)
 	}
 	body := "#!/bin/sh\nrm -rf " + shellQuote(dir) + "\nclear\n" + cmd + "\n" +
 		`printf '\nPress Enter to close this window.'; read _` + "\n"

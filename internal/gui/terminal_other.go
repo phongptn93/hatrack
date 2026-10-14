@@ -2,8 +2,15 @@
 
 package gui
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 func OpenAddInTerminal(string) error {
 	return errors.New("run `hat add` in a terminal to add an account")
+}
+
+func OpenHatInTerminal(args ...string) error {
+	return errors.New("run `hat " + strings.Join(args, " ") + "` in a terminal")
 }
