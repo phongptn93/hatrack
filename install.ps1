@@ -1,9 +1,9 @@
 # Installs hat and the hatrack tray app for the current user, and starts the tray with Windows.
-# irm https://raw.githubusercontent.com/baodq97/hatrack/main/install.ps1 | iex
+# irm https://raw.githubusercontent.com/phongptn93/hatrack/main/install.ps1 | iex
 $ErrorActionPreference = 'Stop'
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $dir = Join-Path $env:LOCALAPPDATA 'hatrack'
-$base = 'https://github.com/baodq97/hatrack/releases/latest/download'
+$base = 'https://github.com/phongptn93/hatrack/releases/latest/download'
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 # a running tray locks its exe
