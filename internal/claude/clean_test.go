@@ -18,7 +18,7 @@ func TestFindGoneAndForget(t *testing.T) {
 	write(t, s.GlobalJSON, `{"numStartups":7,"oauthAccount":{"emailAddress":"a@x.com"},"projects":{
 		"`+kept+`":{"a":1},"`+deleted+`":{"mcpServers":{"db":{"command":"x"}}},"`+unmounted+`":{"b":2}}}`)
 	tdir := filepath.Join(s.ConfigDir, "projects", "-deleted")
-	write(t, filepath.Join(tdir, "s.jsonl"), `{"type":"user","cwd":"`+filepath.FromSlash(deleted)+`"}`+"\n")
+	write(t, filepath.Join(tdir, "s.jsonl"), `{"type":"user","cwd":"`+strings.ReplaceAll(filepath.FromSlash(deleted), `\`, `\\`)+`"}`+"\n")
 
 	gs, err := s.FindGone()
 	must(t, err)

@@ -1,6 +1,8 @@
 # Installs hat and the hatrack tray app for the current user, and starts the tray with Windows.
 # irm https://raw.githubusercontent.com/phongptn93/hatrack/main/install.ps1 | iex
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 may still default to TLS 1.0, which GitHub refuses
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $dir = Join-Path $env:LOCALAPPDATA 'hatrack'
 $base = 'https://github.com/phongptn93/hatrack/releases/latest/download'
