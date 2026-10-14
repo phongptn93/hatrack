@@ -28,8 +28,10 @@ round-trips a throwaway item through the real login keychain.
 
 ## Releasing
 
-Maintainers tag a version and push it; the release workflow tests, builds, attests and publishes:
+The release workflow tests, builds, attests and publishes a version. Start it either way:
 
-```sh
-git tag v0.1.0 && git push origin v0.1.0
-```
+- **From GitHub:** Actions → release → Run workflow, on `main`, with the version (such as `v0.2.0`).
+  It tags the commit it builds.
+- **With a tag:** `git tag v0.2.0 && git push origin v0.2.0`.
+
+Do not create the release by hand first: the workflow creates it, and stops if the version exists.
