@@ -25,7 +25,8 @@ const helpText = `hat - switch Claude Code accounts and manage its MCP servers
   hat statusline install   show your limits in Claude Code and warn before you hit them
   hat doctor        check Claude Code's setup: login, files, MCP servers
   hat clean         forget deleted folders Claude still remembers (asks first)
-  hat version       print the version
+  hat version       print the version, and say when a newer one is out
+  hat update        update hat (and the Windows tray app) to the latest release
 
 Names default to the account's email.`
 
@@ -48,6 +49,9 @@ func main() {
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "mcp" {
 		return runMCP(args[1:])
+	}
+	if len(args) > 0 && args[0] == "update" {
+		return selfUpdate(args[1:])
 	}
 	s, err := claude.Default()
 	if err != nil {
@@ -118,8 +122,7 @@ func run(args []string) error {
 	case cmd == "clean":
 		return clean(s, args[1:])
 	case cmd == "version" || cmd == "--version":
-		fmt.Println("hat", version)
-		return nil
+		return printVersion()
 	case cmd == "-h" || cmd == "--help" || cmd == "help":
 		fmt.Println(helpText)
 		return nil
