@@ -42,14 +42,20 @@ func LoadMCP(c *mcp.Config) (MCPState, error) {
 	return st, err
 }
 
-// AddMCP adds an "MCP servers" submenu: a checkbox per server to switch it on and off, then the sets.
-func AddMCP(c *mcp.Config, st MCPState, on OnClick) {
+// AddMCP adds an "MCP servers" submenu: "Add server…" when add is given, a checkbox per server to
+// switch it on and off, then the sets.
+func AddMCP(c *mcp.Config, st MCPState, on OnClick, add func() error) {
 	menu := systray.AddMenuItem("MCP servers", "Switch Claude's user-scope MCP servers on and off")
 	if c == nil {
 		menu.Disable()
 		return
 	}
-	if len(st.Servers) == 0 {
+	if add != nil {
+		on(menu.AddSubMenuItem("Add server…", "Pick one from the catalog in a console window"), add)
+		if len(st.Servers) > 0 {
+			menu.AddSeparator()
+		}
+	} else if len(st.Servers) == 0 {
 		menu.AddSubMenuItem("None yet: see `hat mcp catalog`", "").Disable()
 	}
 	for _, s := range st.Servers {

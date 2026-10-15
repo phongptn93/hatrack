@@ -30,17 +30,18 @@ type Tray struct {
 	done         chan struct{}
 	onOpenWindow func()
 	onAdd        func() error
+	onAddMCP     func() error
 }
 
 // Start runs the menu bar on the calling goroutine, which must be the main one.
-func Start(s *claude.Store, onOpenWindow func(), onAdd func() error) {
+func Start(s *claude.Store, onOpenWindow func(), onAdd, onAddMCP func() error) {
 	systray.Run(func() {
 		systray.SetIcon(icon)
 		systray.SetTitle("")
 		systray.SetTooltip("Hatrack - Claude Account Switcher")
 
 		m, merr := mcp.Default("") // a menu has no folder: user-scope servers only
-		t := &Tray{s: s, m: m, err: merr, onOpenWindow: onOpenWindow, onAdd: onAdd}
+		t := &Tray{s: s, m: m, err: merr, onOpenWindow: onOpenWindow, onAdd: onAdd, onAddMCP: onAddMCP}
 		t.render()
 
 		go func() {
@@ -145,7 +146,7 @@ func (t *Tray) render() {
 	}
 
 	systray.AddSeparator()
-	traymenu.AddMCP(t.m, mst, t.on)
+	traymenu.AddMCP(t.m, mst, t.on, t.onAddMCP)
 
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit Hatrack", "Exit application")
