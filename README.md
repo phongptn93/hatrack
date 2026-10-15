@@ -124,9 +124,15 @@ The macOS app ships as `Hatrack-macos.zip`, with its own `Hatrack-macos.zip.sha2
 
 ### Update
 
-Run the install command again. On Windows it stops the running tray app first, since Windows locks a
-running exe. For the macOS app, quit Hatrack from the menu bar and replace `Hatrack.app` with the one
-from the new release.
+`hat version` says when a newer release is out, and `hat update` installs it: it downloads `hat` (on
+Windows also the tray app), checks each file against the release's `checksums.txt`, and swaps it in.
+A running tray app restarts into the new version on its own.
+
+The Windows tray app checks GitHub once a day (`HATRACK_NO_UPDATE_CHECK=1` turns that off). When a new version is out, **⬆ Update to vX.Y.Z**
+shows at the top of its menu and in the icon's tooltip; click it to update.
+
+Running the install command again also updates. For the macOS app, quit Hatrack from the menu bar
+and replace `Hatrack.app` with the one from the new release.
 
 ## Getting started
 
@@ -154,7 +160,8 @@ Profile names default to the account's email. Pass a name to pick your own: `hat
 | `hat statusline install` | Show your limits in Claude Code and warn before you reach them; `uninstall` undoes it. See [Limits and warnings](#limits-and-warnings). |
 | `hat doctor` | Check Claude Code's setup. See [Doctor and clean](#doctor-and-clean). |
 | `hat clean` | Forget deleted folders Claude still remembers. |
-| `hat version` | Print the version. |
+| `hat version` | Print the version, and say when a newer one is out. |
+| `hat update` | Update to the latest release. See [Update](#update). |
 
 ## Windows tray app
 
@@ -175,6 +182,9 @@ MCP servers ▸
 ─────────────
 Quit
 ```
+
+When a new version is out, **⬆ Update to vX.Y.Z** shows at the top. Click it to update; the tray
+restarts on its own.
 
 - **Click an account** to switch to it. The check mark shows the active one; hover the icon to see it too.
 - **Add account…** opens a console that walks you through signing in another account.
@@ -560,10 +570,13 @@ back as it was.
 
 ## Security and privacy
 
-- hatrack makes **no network requests** of its own. Tokens never leave your machine; only Claude itself
-  talks to Anthropic. The one exception is `hat mcp test` on a remote (http) MCP server, which you run
-  on purpose: it contacts that server, with the headers you configured, as Claude would. Testing a
-  local server runs its command, which may download it (`npx`, `uvx`).
+- Tokens never leave your machine; only Claude itself talks to Anthropic. hatrack's own requests go to
+  this repository's GitHub releases: the Windows tray app (once a day) and `hat version` ask which
+  version is newest, sending nothing about you, and `hat update` downloads it. Set
+  `HATRACK_NO_UPDATE_CHECK=1` to stop the checks; `hat update` still works when you run it. The other
+  exception is `hat mcp test` on a remote (http) MCP server, which you run on purpose: it contacts
+  that server, with the headers you configured, as Claude would. Testing a local server runs its
+  command, which may download it (`npx`, `uvx`).
 - MCP server configs (connection strings, tokens) stay where Claude keeps them; switched-off ones go to
   `~/.hatrack/mcp/disabled.json`, readable only by you. `hat mcp` and `show` hide secrets unless you
   pass `--reveal`; `export` writes them in full.

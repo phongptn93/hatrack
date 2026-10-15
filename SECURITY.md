@@ -14,7 +14,8 @@ You will get an answer within a week.
 
 - Tokens written somewhere other users can read, or left behind after they should be deleted.
 - A way to make hatrack read or write files outside Claude's login files and `~/.hatrack`.
-- Anything that sends tokens over the network. hatrack should make no network requests at all.
+- Anything that sends tokens over the network. The only requests hatrack makes are to this repository's
+  GitHub releases, to see whether a newer version is out and to download it with `hat update`.
 - Tampered release binaries: check them with `gh attestation verify` first.
 
 ## Never send
